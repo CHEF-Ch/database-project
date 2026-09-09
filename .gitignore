@@ -1,0 +1,23 @@
+# Word/Office 临时锁文件
+~$*.docx
+~$*.pptx
+~$*.xlsx
+*.tmp
+*.wbk
+
+# SQL Server 数据库文件（不进仓库）
+*.mdf
+*.ldf
+*.ndf
+*.bak
+
+# 系统 / 编辑器
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vs/
+.idea/
+*.suo
+
+# 日志
+*.log
