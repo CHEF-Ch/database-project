@@ -5,6 +5,21 @@
 --       积分计分与冲正、储值充值/消费/退回、券的未使用/已核销/已退回。
 -- 注意：BIGINT IDENTITY 列（流水/持券主键）不显式插入，由 DB 自动生成。
 -- =====================================================================
+
+-- 显式切库：本脚本必须能在**任意默认库**下独立执行。
+-- 不写这行时，sqlcmd 会落在登录的默认库（通常是 master），
+-- 报"对象名 'xxx' 无效"——在 SSMS 里因当前上下文恰为 BubbleTeaShop 而看不出来。
+-- 空库复现要求每个脚本自洽，不依赖执行者的上下文。
+USE BubbleTeaShop;
+GO
+
+-- 会话选项：shop_order / member_member / member_balance_log 上有**筛选唯一索引**，
+-- 对这类表做 INSERT 要求这两个选项为 ON（否则报错误 1934）。
+-- 与 01-schema.sql 保持一致，同样不依赖客户端默认值。
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
+
 SET NOCOUNT ON;
 GO
 
@@ -15,7 +30,15 @@ INSERT INTO staff_employee (employee_id, name, job_title, employ_status) VALUES
 ('E0000001', N'张伟', 'CASHIER',      'ACTIVE'),
 ('E0000002', N'李娜', 'MAKER',        'ACTIVE'),
 ('E0000003', N'王强', 'STOCK_KEEPER', 'ACTIVE'),
-('E0000004', N'赵敏', 'MANAGER',      'ACTIVE');
+('E0000004', N'赵敏', 'MANAGER',      'ACTIVE'),
+-- 以下为背景数据员工（第 4 周聚合查询需多人分组，见文末说明）
+('E0000005', N'孙磊', 'CASHIER',      'ACTIVE'),
+('E0000006', N'周静', 'MAKER',        'ACTIVE'),
+-- SYSTEM 代理：代表"系统/客户自助"，非真人。
+-- 自助单（COUNTER_SELF）由客户自己在小程序下单，无店员经手；
+-- 但 shop_order.employee_id 为非空（docs/02 §5.7 第 1 条），故由本行充当经办。
+-- 这样写不伪造任何真人经手客户自己下的单，账目与事实一致。
+('E0000007', N'系统', 'SYSTEM',       'ACTIVE');
 GO
 
 -- 原料 / 加料（kind 区分；stock_qty/reserved_qty 为当前快照，已反映历史流水）
@@ -78,7 +101,13 @@ GO
 INSERT INTO member_member (member_id, phone, name, points, balance, created_at) VALUES
 ('C0000001', '13800000001', N'陈晓', 118, 77.00, '2026-09-10 10:00:00'),
 ('C0000002', '13800000002', N'刘洋',   0,  0.00, '2026-09-12 14:30:00'),
-('C0000003', '13800000003', N'王芳',   0,  0.00, '2026-09-15 09:00:00');
+('C0000003', '13800000003', N'王芳',   0,  0.00, '2026-09-15 09:00:00'),
+-- 以下为背景数据会员（第 4 周会员聚合/HAVING 需多个分组）
+('C0000004', '13800000004', N'李萌',   0,  0.00, '2026-08-02 10:00:00'),
+('C0000005', '13800000005', N'吴桐',   0,  0.00, '2026-08-05 11:00:00'),
+('C0000006', '13800000006', N'郑楠',   0,  0.00, '2026-08-09 15:00:00'),
+('C0000007', NULL,          N'孙悦',   0,  0.00, '2026-08-14 12:00:00'),
+('C0000008', '13800000008', N'黄杰',   0,  0.00, '2026-08-21 17:00:00');
 GO
 
 -- 券规则（满减券，固定起止日期）
@@ -121,22 +150,76 @@ INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, 
 ('202609160001', 'COUNTER', 'COUNTER_CASHIER', 'COMPLETED', NULL, 'E0000001', 34.00, 0.00, 34.00, 'CASH', NULL, '2026-09-16 09:15:00', '2026-09-16 09:16:00', '2026-09-16 09:25:00', NULL, NULL);
 -- 单2 到店·自助·会员·余额·用券(满20减3)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
-('202609160002', 'COUNTER', 'COUNTER_SELF', 'COMPLETED', 'C0000001', NULL, 26.00, 3.00, 23.00, 'BALANCE', NULL, '2026-09-16 11:00:00', '2026-09-16 11:02:00', '2026-09-16 11:15:00', NULL, NULL);
+('202609160002', 'COUNTER', 'COUNTER_SELF', 'COMPLETED', 'C0000001', 'E0000007', 26.00, 3.00, 23.00, 'BALANCE', NULL, '2026-09-16 11:00:00', '2026-09-16 11:02:00', '2026-09-16 11:15:00', NULL, NULL);
 -- 单3 到店·自助·会员·线上·加料(计分)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
-('202609160003', 'COUNTER', 'COUNTER_SELF', 'COMPLETED', 'C0000001', NULL, 18.00, 0.00, 18.00, 'ONLINE', 'WX202609161001', '2026-09-16 12:30:00', '2026-09-16 12:31:00', '2026-09-16 12:45:00', NULL, NULL);
+('202609160003', 'COUNTER', 'COUNTER_SELF', 'COMPLETED', 'C0000001', 'E0000007', 18.00, 0.00, 18.00, 'ONLINE', 'WX202609161001', '2026-09-16 12:30:00', '2026-09-16 12:31:00', '2026-09-16 12:45:00', NULL, NULL);
 -- 单4 平台·美团·非会员(平台预收款，无 pay_method，接单即扣料)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
 ('202609160004', 'PLATFORM', NULL, 'COMPLETED', NULL, 'E0000001', 24.00, 0.00, 24.00, NULL, NULL, '2026-09-16 13:10:00', '2026-09-16 13:10:00', '2026-09-16 13:40:00', NULL, NULL);
 -- 单5 到店·自助·会员·待支付(预占原料，不写流水)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
-('202609160005', 'COUNTER', 'COUNTER_SELF', 'PENDING', 'C0000002', NULL, 13.00, 0.00, 13.00, NULL, NULL, '2026-09-16 14:00:00', NULL, NULL, NULL, NULL);
+('202609160005', 'COUNTER', 'COUNTER_SELF', 'PENDING', 'C0000002', 'E0000007', 13.00, 0.00, 13.00, NULL, NULL, '2026-09-16 14:00:00', NULL, NULL, NULL, NULL);
 -- 单6 到店·线上·整单退款(冲正积分)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
 ('202609160006', 'COUNTER', 'COUNTER_CASHIER', 'REFUNDED', 'C0000003', 'E0000001', 12.00, 0.00, 12.00, 'ONLINE', 'ALI202609160002', '2026-09-16 15:00:00', '2026-09-16 15:01:00', NULL, 12.00, '2026-09-16 15:30:00');
 -- 单7 到店·余额·用券(满30减5)·整单退款(余额退回、券退回)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
 ('202609160007', 'COUNTER', 'COUNTER_CASHIER', 'REFUNDED', 'C0000001', 'E0000001', 34.00, 5.00, 29.00, 'BALANCE', NULL, '2026-09-16 16:00:00', '2026-09-16 16:01:00', NULL, 29.00, '2026-09-16 16:20:00');
+GO
+
+-- ---------- 背景订单（2026-08 日常营业）----------
+-- 【性质】与上方 7 单故事线**无关**，是另一类数据。
+-- 【目的】仅为第 4 周聚合查询提供分组多样性：上方 7 单集中在 09-16 一天、
+--         会员 3 人、员工 1 人经手，GROUP BY 会员/员工/日期时组内行数过少，
+--         HAVING、排行、分组统计都看不出效果。
+-- 【不含】库存流水、积分流水、储值流水、加料明细。
+--         理由：docs/02 §5.3 只要求流水"解释"快照，并未约定"快照 == 流水求和"
+--         必须成立（CHECK 亦无法跨表求和）；且 item_material.stock_qty 与上方
+--         流水的差额本就存在，其含义是"早于 seed 记录起点的历史"，见原料段注释。
+--         故此处只加订单与明细，使聚合维度可用，不伪造库存/账务流水。
+-- 【覆盖】2026-08-03 ~ 2026-08-28，每周一/三/五各 1 单，共 13 单。
+INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
+('202608030001', 'COUNTER', 'COUNTER_CASHIER', 'COMPLETED', 'C0000004', 'E0000001', 20.00, 0.00, 20.00, 'CASH',   NULL,               '2026-08-03 10:20:00', '2026-08-03 10:21:00', '2026-08-03 10:30:00', NULL, NULL),
+('202608050001', 'COUNTER', 'COUNTER_SELF',    'COMPLETED', 'C0000005', 'E0000007',      27.00, 0.00, 27.00, 'ONLINE', 'WX202608051001',   '2026-08-05 14:05:00', '2026-08-05 14:06:00', '2026-08-05 14:18:00', NULL, NULL),
+('202608070001', 'COUNTER', 'COUNTER_CASHIER', 'COMPLETED', NULL,       'E0000005', 12.00, 0.00, 12.00, 'CASH',   NULL,               '2026-08-07 11:40:00', '2026-08-07 11:41:00', '2026-08-07 11:50:00', NULL, NULL),
+('202608100001', 'COUNTER', 'COUNTER_SELF',    'COMPLETED', 'C0000006', 'E0000007',      23.00, 3.00, 20.00, 'ONLINE', 'WX202608101001',   '2026-08-10 09:30:00', '2026-08-10 09:31:00', '2026-08-10 09:45:00', NULL, NULL),
+('202608120001', 'PLATFORM', NULL,             'COMPLETED', NULL,       'E0000002', 15.00, 0.00, 15.00, NULL,     NULL,               '2026-08-12 12:00:00', '2026-08-12 12:00:00', '2026-08-12 12:30:00', NULL, NULL),
+('202608140001', 'COUNTER', 'COUNTER_CASHIER', 'COMPLETED', 'C0000004', 'E0000001', 38.00, 5.00, 33.00, 'BALANCE', NULL,              '2026-08-14 16:20:00', '2026-08-14 16:21:00', '2026-08-14 16:35:00', NULL, NULL),
+('202608170001', 'COUNTER', 'COUNTER_SELF',    'COMPLETED', 'C0000007', 'E0000007',      19.00, 0.00, 19.00, 'ONLINE', 'ALI202608170001',  '2026-08-17 13:15:00', '2026-08-17 13:16:00', '2026-08-17 13:28:00', NULL, NULL),
+('202608190001', 'COUNTER', 'COUNTER_CASHIER', 'COMPLETED', 'C0000005', 'E0000006', 35.00, 5.00, 30.00, 'CASH',   NULL,               '2026-08-19 10:05:00', '2026-08-19 10:06:00', '2026-08-19 10:15:00', NULL, NULL),
+('202608210001', 'COUNTER', 'COUNTER_SELF',    'COMPLETED', 'C0000008', 'E0000007',      20.00, 0.00, 20.00, 'ONLINE', 'WX202608211001',   '2026-08-21 15:45:00', '2026-08-21 15:46:00', '2026-08-21 15:58:00', NULL, NULL),
+('202608240001', 'PLATFORM', NULL,             'COMPLETED', NULL,       'E0000002', 27.00, 0.00, 27.00, NULL,     NULL,               '2026-08-24 11:10:00', '2026-08-24 11:10:00', '2026-08-24 11:40:00', NULL, NULL),
+('202608260001', 'COUNTER', 'COUNTER_CASHIER', 'COMPLETED', 'C0000006', 'E0000005', 24.00, 0.00, 24.00, 'CASH',   NULL,               '2026-08-26 17:30:00', '2026-08-26 17:31:00', '2026-08-26 17:42:00', NULL, NULL),
+('202608280001', 'COUNTER', 'COUNTER_SELF',    'COMPLETED', 'C0000007', 'E0000007',      11.00, 0.00, 11.00, 'BALANCE', NULL,              '2026-08-28 12:50:00', '2026-08-28 12:51:00', '2026-08-28 13:05:00', NULL, NULL),
+('202608280002', 'COUNTER', 'COUNTER_CASHIER', 'COMPLETED', 'C0000008', 'E0000001', 38.00, 5.00, 33.00, 'CASH',   NULL,               '2026-08-28 18:20:00', '2026-08-28 18:21:00', '2026-08-28 18:33:00', NULL, NULL);
+GO
+
+-- 背景订单的明细（每单 1—3 行，金额与上方 item_subtotal 对应）
+INSERT INTO order_item (order_id, item_line, product_id, size, sugar_level, ice_level, temp_level, qty, unit_price) VALUES
+('202608030001', 1, 'P0000001', 'MEDIUM', 'FULL',   'REGULAR', 'COLD', 1, 12.00),
+('202608030001', 2, 'P0000003', 'MEDIUM', 'HALF',   'LESS',    'COLD', 1,  8.00),
+('202608050001', 1, 'P0000005', 'MEDIUM', 'FULL',   'REGULAR', 'COLD', 1, 12.00),
+('202608050001', 2, 'P0000002', 'LARGE',  'FULL',   'REGULAR', 'COLD', 1, 15.00),
+('202608070001', 1, 'P0000001', 'MEDIUM', 'NONE',   'REGULAR', 'COLD', 1, 12.00),
+('202608100001', 1, 'P0000004', 'MEDIUM', 'FULL',   'REGULAR', 'COLD', 1, 11.00),
+('202608100001', 2, 'P0000001', 'MEDIUM', 'FULL',   'REGULAR', 'COLD', 1, 12.00),
+('202608120001', 1, 'P0000002', 'LARGE',  'FULL',   'REGULAR', 'COLD', 1, 15.00),
+('202608140001', 1, 'P0000002', 'LARGE',  'FULL',   'REGULAR', 'COLD', 2, 15.00),
+('202608140001', 2, 'P0000003', 'MEDIUM', 'HALF',   'REGULAR', 'COLD', 1,  8.00),
+('202608170001', 1, 'P0000004', 'MEDIUM', 'HALF',   'LESS',    'COLD', 1, 11.00),
+('202608170001', 2, 'P0000003', 'MEDIUM', 'FULL',   'REGULAR', 'COLD', 1,  8.00),
+('202608190001', 1, 'P0000002', 'LARGE',  'FULL',   'REGULAR', 'COLD', 1, 15.00),
+('202608190001', 2, 'P0000001', 'MEDIUM', 'FULL',   'REGULAR', 'COLD', 1, 12.00),
+('202608190001', 3, 'P0000003', 'MEDIUM', 'FULL',   'REGULAR', 'COLD', 1,  8.00),
+('202608210001', 1, 'P0000001', 'MEDIUM', 'FULL',   'REGULAR', 'HOT',  1, 12.00),
+('202608210001', 2, 'P0000003', 'MEDIUM', 'NONE',   'REGULAR', 'COLD', 1,  8.00),
+('202608240001', 1, 'P0000005', 'MEDIUM', 'FULL',   'REGULAR', 'COLD', 1, 12.00),
+('202608240001', 2, 'P0000002', 'LARGE',  'FULL',   'REGULAR', 'COLD', 1, 15.00),
+('202608260001', 1, 'P0000001', 'MEDIUM', 'FULL',   'REGULAR', 'COLD', 2, 12.00),
+('202608280001', 1, 'P0000004', 'MEDIUM', 'FULL',   'REGULAR', 'COLD', 1, 11.00),
+('202608280002', 1, 'P0000002', 'LARGE',  'FULL',   'REGULAR', 'COLD', 2, 15.00),
+('202608280002', 2, 'P0000003', 'MEDIUM', 'HALF',   'REGULAR', 'COLD', 1,  8.00);
 GO
 
 -- 平台订单信息（仅单4）
