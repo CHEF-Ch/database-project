@@ -31,10 +31,22 @@
      当场不成立。
 
    ★ CHECK 的取舍口径（本脚本统一按此执行，便于审计）：
-     · 列级 CHECK **本周写齐**——枚举取值（docs/02 §1.1 共 18 项）与
-       "> 0 / >= 0" 这类单列取值范围（docs/06/第二周 §六.8）。
-     · 行级/跨列 CHECK **留给第 4 周**——如 CHECK (reserved_qty <= stock_qty)，
-       依据是 docs/06/第二周 §六.8 末段"属第 4 周""此处仅记录，不写 SQL"。
+     · 列级 CHECK（枚举取值、" > 0 / >= 0" 这类单列取值范围）——本周写齐。
+     · 跨列 CHECK——**本周也写**。原写"留给第 4 周"，第 3 周经查证**推翻**：
+
+       docs/06/第二周 §六.8 末段只针对**一条具体约束**（reserved_qty <= stock_qty）
+       说"属第 4 周"、"此处仅记录不写 SQL"，**并未给出"跨列就推后"的整类规则**——
+       那句本身也没论证"为什么跨列要等第 4 周"。第 3 周回查课程原始文档后确认：
+
+         · 第三周任务 §2 明写本周要"设置数据约束，定义主键、候选码、外键、
+           非空约束、默认值和**检查约束**"，**未区分列级/跨列**。
+         · 周次表第 4 周产出的 constraint.sql 是"把已写约束**抽出来演示**"，
+           不是"第 4 周才开始写约束"——文件与内容的区别。
+         · docs/06/第三周 §四 第 1 条**已查证过同一结论**（"是'内容'与'文件'
+           的区别：本周把 CHECK 写进 01-schema.sql，第 4 周再抽成独立文件"），
+           只是**没有回头修正 §六.8 那句**，导致该判断以被推翻的形态留在文档里。
+
+       故本周一并写入，第 4 周 constraint.sql 照搬演示即可。详见 docs/02 §5.7 第 7 条。
    ============================================================================ */
 
 SET NOCOUNT ON;
@@ -106,7 +118,9 @@ CREATE TABLE dbo.item_material
 (
     material_id     CHAR(8)       NOT NULL,  -- 主码，M + 7 位序号
     name            NVARCHAR(100) NOT NULL,  -- 原料名
-    unit            VARCHAR(10)   NOT NULL,  -- 单位（克/毫升/个），只在原料表存
+    -- unit 用 NVARCHAR 而非 VARCHAR：seed 存的取值是中文（N'克'/N'毫升'/N'个'）。
+    -- VARCHAR 存中文受库排序规则影响，可能乱码（docs/02 §5.7 第 6 条）。
+    unit            NVARCHAR(10)  NOT NULL,  -- 单位（克/毫升/个），只在原料表存
     material_kind   VARCHAR(10)   NOT NULL,  -- INGREDIENT 原料 / ADDON 加料
     stock_qty       DECIMAL(10,2) NOT NULL CONSTRAINT DF_item_material_stock_qty    DEFAULT (0),
     reserved_qty    DECIMAL(10,2) NOT NULL CONSTRAINT DF_item_material_reserved_qty DEFAULT (0),
@@ -117,13 +131,21 @@ CREATE TABLE dbo.item_material
     -- 候选码：单店原料名唯一（docs/02 §5.2）
     CONSTRAINT UQ_item_material_name            UNIQUE (name),
     CONSTRAINT CK_item_material_material_kind   CHECK (material_kind IN ('INGREDIENT', 'ADDON')),
+    -- 单位取值限定为三种（docs/02 §2.2-2）。用 N'' 前缀：列为 NVARCHAR，
+    -- 且取值本身是中文，不加前缀会走非 Unicode 字面量。
+    CONSTRAINT CK_item_material_unit            CHECK (unit IN (N'克', N'毫升', N'个')),
     -- 状态型快照，可以为 0（0 = 卖完了）           docs/06/第二周 §六.8
     CONSTRAINT CK_item_material_stock_qty       CHECK (stock_qty    >= 0),
     CONSTRAINT CK_item_material_reserved_qty    CHECK (reserved_qty >= 0),
     CONSTRAINT CK_item_material_safety_stock    CHECK (safety_stock >= 0),
     -- "能放 0 天"无意义，故 > 0。列为 NULL 时 CHECK 求值为 UNKNOWN，不拦——
     -- 这正是"NULL = 不管控效期"想要的行为，无需额外写 IS NULL OR ...。
-    CONSTRAINT CK_item_material_shelf_life_days CHECK (shelf_life_days > 0)
+    CONSTRAINT CK_item_material_shelf_life_days CHECK (shelf_life_days > 0),
+    -- 预留量不得超过现存量（docs/06/第二周 §六.8 末段原记"属第 4 周"，
+    --   第 3 周经查证改为本周落地——理由见 docs/02 §5.7 第 7 条）：
+    --   第 4 周的 constraint.sql 是"把已写约束抽出来演示"，不是"第 4 周才开始写约束"，
+    --   第三周任务 §2 明写本周要"设置……检查约束"且未区分列级/跨列。
+    CONSTRAINT CK_item_material_reserved_le_stock CHECK (reserved_qty <= stock_qty)
 );
 GO
 
@@ -257,7 +279,10 @@ CREATE TABLE dbo.shop_order
     -- 正好表达"平台单无 order_mode""未付款无 pay_method"。
     CONSTRAINT CK_shop_order_order_mode   CHECK (order_mode   IN ('COUNTER_CASHIER', 'COUNTER_SELF')),
     CONSTRAINT CK_shop_order_order_status CHECK (order_status IN ('PENDING', 'PAID', 'MAKING', 'COMPLETED', 'CANCELLED', 'REFUNDED')),
-    CONSTRAINT CK_shop_order_pay_method   CHECK (pay_method   IN ('CASH', 'ONLINE', 'BALANCE'))
+    CONSTRAINT CK_shop_order_pay_method   CHECK (pay_method   IN ('CASH', 'ONLINE', 'BALANCE')),
+    -- 实付金额不得为负。券后金额 = item_subtotal − coupon_discount，
+    -- 本约束即"券优惠不得超过券前金额"的结果表达（docs/02 §5.7 第 7 条）。
+    CONSTRAINT CK_shop_order_total_amount CHECK (total_amount >= 0)
 );
 GO
 
@@ -320,7 +345,17 @@ CREATE TABLE dbo.inv_restock
     -- 候选码：无                                          docs/02 §5.2
     CONSTRAINT PK_inv_restock PRIMARY KEY (restock_id),
     CONSTRAINT FK_inv_restock_staff_employee FOREIGN KEY (employee_id) REFERENCES dbo.staff_employee (employee_id),
-    CONSTRAINT CK_inv_restock_restock_status CHECK (restock_status IN ('PENDING', 'RECEIVED', 'CANCELLED'))
+    CONSTRAINT CK_inv_restock_restock_status CHECK (restock_status IN ('PENDING', 'RECEIVED', 'CANCELLED')),
+    -- 到货时间与状态互为充要：RECEIVED 必有 received_at，PENDING/CANCELLED 必无。
+    -- 写法用 **OR 展开双向蕴含**，不能用 (A IS NULL) = (B <> 'RECEIVED')：
+    --   T-SQL **没有布尔类型**，`a IS NULL` 是谓词（TRUE/FALSE），
+    --   不是可参与 `=` 比较的表达式——实测报错误 102「"="附近有语法错误」。
+    --   也不能用 `= NULL`：会得 UNKNOWN，而 CHECK 只拒 FALSE、放行 UNKNOWN，
+    --   约束会**静默失效**。两种错法都要避免。（docs/02 §5.7 第 7 条）
+    CONSTRAINT CK_inv_restock_received CHECK (
+        (received_at IS NULL     AND restock_status <> 'RECEIVED')
+     OR (received_at IS NOT NULL AND restock_status  = 'RECEIVED')
+    )
 );
 GO
 
@@ -370,7 +405,9 @@ CREATE TABLE dbo.order_platform
     -- 候选码：平台外部单号唯一，防重（docs/02 §5.2）
     CONSTRAINT UQ_order_platform_platform_order_no UNIQUE (platform_order_no),
     CONSTRAINT FK_order_platform_shop_order FOREIGN KEY (order_id) REFERENCES dbo.shop_order (order_id) ON DELETE CASCADE,
-    CONSTRAINT CK_order_platform_platform_name CHECK (platform_name IN ('MEITUAN', 'ELEME'))
+    CONSTRAINT CK_order_platform_platform_name CHECK (platform_name IN ('MEITUAN', 'ELEME')),
+    -- 配送费不可能为负（0 = 免配送费，是合法状态）。docs/02 §5.7 第 7 条
+    CONSTRAINT CK_order_platform_delivery_fee  CHECK (delivery_fee >= 0)
 );
 GO
 
@@ -441,7 +478,17 @@ CREATE TABLE dbo.member_point_log
     CONSTRAINT FK_member_point_log_member_member FOREIGN KEY (member_id) REFERENCES dbo.member_member (member_id),
     CONSTRAINT FK_member_point_log_shop_order    FOREIGN KEY (order_id)  REFERENCES dbo.shop_order    (order_id),
     CONSTRAINT CK_member_point_log_point_type CHECK (point_type IN ('EARN_SALE', 'EARN_RECHARGE', 'REVERSAL')),
-    CONSTRAINT CK_member_point_log_points     CHECK (points > 0)
+    CONSTRAINT CK_member_point_log_points     CHECK (points > 0),
+    -- order_id 与 point_type 互为充要：EARN_RECHARGE（充值送分）无订单，其余必有。
+    -- 此映射字典原文已有（§2.2 该表 order_id 行写"EARN_SALE/REVERSAL；
+    --   EARN_RECHARGE 为 NULL"），本周只是把它**落成约束**，非新增语义。
+    -- 写法同 CK_inv_restock_received：OR 展开双向蕴含（T-SQL 无布尔类型，
+    --   谓词不能作 `=` 操作数，实测报错 102；见 docs/02 §5.7 第 7 条）。
+    -- 外码列含 NULL 时不检查引用完整性，故 EARN_RECHARGE 行可正常插入。
+    CONSTRAINT CK_member_point_log_order CHECK (
+        (point_type  = 'EARN_RECHARGE' AND order_id IS NULL)
+     OR (point_type <> 'EARN_RECHARGE' AND order_id IS NOT NULL)
+    )
 );
 GO
 
@@ -491,7 +538,14 @@ CREATE TABLE dbo.mkt_coupon_rule
 
     -- 候选码：无（同规则可建多张）                        docs/02 §5.2
     CONSTRAINT PK_mkt_coupon_rule PRIMARY KEY (coupon_rule_id),
-    CONSTRAINT CK_mkt_coupon_rule_coupon_type CHECK (coupon_type IN ('FULL_REDUCTION'))
+    CONSTRAINT CK_mkt_coupon_rule_coupon_type CHECK (coupon_type IN ('FULL_REDUCTION')),
+    -- 门槛必须为正：不允许无门槛券（满 0 减 X 无意义）。docs/02 §5.7 第 7 条
+    CONSTRAINT CK_mkt_coupon_rule_threshold  CHECK (threshold_amount > 0),
+    -- 满减额不得低于门槛：允许"满 X 减 X"（免单券），但不允许减得比门槛还多。
+    -- 与 CK_mkt_coupon_rule_discount 合用可排除"满 0 减 0"这类废券。
+    CONSTRAINT CK_mkt_coupon_rule_discount   CHECK (discount_amount > 0 AND discount_amount <= threshold_amount),
+    -- 有效期止不得早于起。docs/02 §5.7 第 7 条
+    CONSTRAINT CK_mkt_coupon_rule_valid      CHECK (valid_to >= valid_from)
 );
 GO
 
@@ -544,7 +598,7 @@ SELECT
 FROM sys.tables t
 ORDER BY t.name;
 
--- 汇总：与 docs/02 §2.2 对表（17 张表、25 条外码、18 项枚举 CHECK）
+-- 汇总：与 docs/02 §2.2 对表（17 张表、25 条外码、18 项枚举 CHECK + 14 项取值范围/跨列 CHECK = 32）
 SELECT
       (SELECT COUNT(*) FROM sys.tables)             AS total_tables
     , (SELECT COUNT(*) FROM sys.foreign_keys)       AS total_fk
@@ -564,29 +618,34 @@ PRINT N'01-schema: 下一步执行 sql/constraint.sql（CHECK 演示）或 sql/0
 GO
 
 /* ===========================================================================
-   附：本脚本【故意没写】的 3 项，以及原因（避免被当成漏写）
+   附：本脚本【故意没写】的 2 项，以及原因（避免被当成漏写）
    ---------------------------------------------------------------------------
-   1. CHECK (reserved_qty <= stock_qty)
-      行级跨列约束，docs/06/第二周 §六.8 末段明确"属第 4 周"、"此处仅记录这是一条
-      约束，不写 SQL"。第 4 周由 constraint.sql 统一补。
-
-   2. CHECK (unit_price > 0) 之类"文档没列、但显然该有"的约束
+   1. CHECK (unit_price > 0) 之类"文档没列、但显然该有"的约束
       docs/02 §2.2 给 unit_price 的约束只写了"非空"，§1.1 与第二周 §六.8 也未列
       售价。docs/06/第三周 §三.2 要求"脚本与文档必须一致，不能两个版本并存"，
-      故不擅自加。同类还有：total_amount >= 0、delivery_fee >= 0、
-      valid_to >= valid_from、threshold_amount > 0 等——都要先回填 docs/02 再改脚本。
+      故不擅自加。同类还有：commission_amount >= 0、valid_from/valid_to 的其他
+      关系等——都要先回填 docs/02 再改脚本。
 
-   3. item_addon_option.material_id "须可作加料"（docs/02 §2.2-4 括注）
+      ★ 本项的处理方式已确立，且第 3 周已按此走了一轮：**先回填 docs/02，再改脚本**。
+        第 3 周据此回填了 6 条（total_amount >= 0、delivery_fee >= 0、
+        threshold_amount > 0、discount_amount <= threshold_amount、
+        valid_to >= valid_from、unit 类型与取值），并同步改本脚本——
+        记录见 docs/02 §5.7 第 6、7 条。其余同类项仍按"先回填再改"执行。
+
+   2. item_addon_option.material_id "须可作加料"（docs/02 §2.2-4 括注）
       跨表规则（要读 item_material.material_kind），CHECK 表达不了，需触发器或
       标量 UDF。按 docs/06/第三周 §三.3"记录下来并回填文档"处理，此处不写。
       同类还有：shop_order 上"channel=PLATFORM 时 order_mode 必为 NULL"、
-      "order_status=PENDING 时 pay_method 必为 NULL"等业务规则。
+      "order_status=PENDING 时 pay_method 必为 NULL"、以及"券折扣不得超过
+      mkt_coupon_rule 登记的门槛"等业务规则——均需跨表读取，CHECK 无法表达。
 
-   另记 2 处文档待修：
+   另记 1 处文档待修：
    · docs/02 §1.1 第 8 项只列了 order_item.size 的杯型取值，而 item_product.size
      用的是同一域（§2.2-1 写作"杯型 SMALL/MEDIUM/LARGE"），本脚本按同域加了
      CK_item_product_size。请把 §1.1 #8 补成两处同域（参照 #9 把三个字段并成
      一行的写法），否则文档与脚本又对不上了。
-   · docs/06/第三周 §二 写"由 docs/02 §3.1 的 24 条关联推出"，但 §3.1 实际有
-     25 行（#1—#25）。本脚本据此建 25 条外码，与 §3.1 一致；§二 的"24 条"需改。
+
+   （原第 1 项"CHECK (reserved_qty <= stock_qty) 留给第 4 周"已于第 3 周**改为本周写入**，
+     理由见本脚本头部"CHECK 的取舍口径"及 docs/02 §5.7 第 7 条。
+     原"另记"里"docs/06 第三周 §二 写 24 条"一条已过期——§二 早已改为 25 条，故删除。）
    =========================================================================== */
