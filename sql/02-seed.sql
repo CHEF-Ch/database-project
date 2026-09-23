@@ -6,6 +6,20 @@
 -- 注意：BIGINT IDENTITY 列（流水/持券主键）不显式插入，由 DB 自动生成。
 -- =====================================================================
 SET NOCOUNT ON;
+
+-- 下面两条 SET 必须显式写死：shop_order / member_member / member_balance_log
+-- 三张表带有**筛选唯一索引**（见 01-schema.sql 中 UQ_member_member_phone 处说明），
+-- 对这类表做 DML 时 SQL Server 要求 QUOTED_IDENTIFIER 与 ANSI_NULLS 均为 ON。
+-- sqlcmd 默认 QUOTED_IDENTIFIER = OFF（SSMS 默认 ON），不写死就会出现
+-- "在 SSMS 里能跑、按 README 的 sqlcmd 命令却报 Msg 1934"。
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
+
+-- 每个脚本都是独立一次 sqlcmd 进程，上下文不会从上一个脚本继承。
+-- 缺这一句时按 sql/README.md 的命令（不带 -d）执行会停在 master，
+-- 第一条 INSERT 就报 "Invalid object name 'staff_employee'"。
+USE [MilkTeaShop];
 GO
 
 -- ---------- 主数据 ----------
@@ -116,21 +130,25 @@ GO
 
 -- ---------- 订单 ----------
 
+-- 注：employee_id 原为 NULL，与 docs/02 §2.2-5（非空）及 §5.7 复核修订 #1
+--     （"自助单记收银/制作员工"）矛盾——自助单扣料必然产生库存流水，那一行的
+--     经办人无处可填。此处按复核结论改为记收银员 E0000001（张伟）。
+
 -- 单1 到店·现金·非会员
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
 ('202609160001', 'COUNTER', 'COUNTER_CASHIER', 'COMPLETED', NULL, 'E0000001', 34.00, 0.00, 34.00, 'CASH', NULL, '2026-09-16 09:15:00', '2026-09-16 09:16:00', '2026-09-16 09:25:00', NULL, NULL);
 -- 单2 到店·自助·会员·余额·用券(满20减3)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
-('202609160002', 'COUNTER', 'COUNTER_SELF', 'COMPLETED', 'C0000001', NULL, 26.00, 3.00, 23.00, 'BALANCE', NULL, '2026-09-16 11:00:00', '2026-09-16 11:02:00', '2026-09-16 11:15:00', NULL, NULL);
+('202609160002', 'COUNTER', 'COUNTER_SELF', 'COMPLETED', 'C0000001', 'E0000001', 26.00, 3.00, 23.00, 'BALANCE', NULL, '2026-09-16 11:00:00', '2026-09-16 11:02:00', '2026-09-16 11:15:00', NULL, NULL);
 -- 单3 到店·自助·会员·线上·加料(计分)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
-('202609160003', 'COUNTER', 'COUNTER_SELF', 'COMPLETED', 'C0000001', NULL, 18.00, 0.00, 18.00, 'ONLINE', 'WX202609161001', '2026-09-16 12:30:00', '2026-09-16 12:31:00', '2026-09-16 12:45:00', NULL, NULL);
+('202609160003', 'COUNTER', 'COUNTER_SELF', 'COMPLETED', 'C0000001', 'E0000001', 18.00, 0.00, 18.00, 'ONLINE', 'WX202609161001', '2026-09-16 12:30:00', '2026-09-16 12:31:00', '2026-09-16 12:45:00', NULL, NULL);
 -- 单4 平台·美团·非会员(平台预收款，无 pay_method，接单即扣料)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
 ('202609160004', 'PLATFORM', NULL, 'COMPLETED', NULL, 'E0000001', 24.00, 0.00, 24.00, NULL, NULL, '2026-09-16 13:10:00', '2026-09-16 13:10:00', '2026-09-16 13:40:00', NULL, NULL);
 -- 单5 到店·自助·会员·待支付(预占原料，不写流水)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
-('202609160005', 'COUNTER', 'COUNTER_SELF', 'PENDING', 'C0000002', NULL, 13.00, 0.00, 13.00, NULL, NULL, '2026-09-16 14:00:00', NULL, NULL, NULL, NULL);
+('202609160005', 'COUNTER', 'COUNTER_SELF', 'PENDING', 'C0000002', 'E0000001', 13.00, 0.00, 13.00, NULL, NULL, '2026-09-16 14:00:00', NULL, NULL, NULL, NULL);
 -- 单6 到店·线上·整单退款(冲正积分)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
 ('202609160006', 'COUNTER', 'COUNTER_CASHIER', 'REFUNDED', 'C0000003', 'E0000001', 12.00, 0.00, 12.00, 'ONLINE', 'ALI202609160002', '2026-09-16 15:00:00', '2026-09-16 15:01:00', NULL, 12.00, '2026-09-16 15:30:00');

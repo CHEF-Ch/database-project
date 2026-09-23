@@ -37,3 +37,7 @@ sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/test.sql
 **复现验证 = 把上面整段从头再跑一次**（`00-create.sql` 会先删库，故无需手工清理），比对两次得到的表结构与数据是否一致。不要求"第二次也不报错地跳过建表"——要求"第二次得到同样的库"。
 
 > `-f 65001` 指定 UTF-8 编码，避免中文乱码；实例名（`.\SQLEXPRESS`）按本机环境修改。
+
+> **脚本自带上下文与 SET 选项，命令无需再加 `-d` 或 `-I`**：每个脚本都在开头自己 `USE [MilkTeaShop]`（各脚本是独立一次 sqlcmd 进程，上下文不继承），并显式 `SET QUOTED_IDENTIFIER ON; SET ANSI_NULLS ON;`。
+> 后者不是可选项：`shop_order` / `member_member` / `member_balance_log` 三张表的候选码是**带筛选条件的唯一索引**（因为 `UNIQUE` 约束在 SQL Server 里只允许一个 NULL，与 `docs/02` §5.2"可空，多 NULL 不冲突"冲突），而 sqlcmd 默认 `QUOTED_IDENTIFIER = OFF`、SSMS 默认 `ON`——不写死就会"在 SSMS 里能跑、按上面的命令却报 `Msg 1934`"。
+> 这一处与另外 4 处缺陷的排查经过见 `docs/06-进度/第三周任务流程与状态.md` §六。
