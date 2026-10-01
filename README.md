@@ -30,9 +30,9 @@
 │   └── 05-组内分工.md            # 成员分工与贡献
 ├── sql/
 │   ├── 00-create.sql          # 建库（只创建、不删除已有库）
-│   ├── 01-schema.sql          # 建表（主码/候选码/外码）
+│   ├── 01-schema.sql          # 建表（字段/非空/默认值）
 │   ├── 02-seed.sql            # 样例数据
-│   ├── constraint.sql         # 检查约束
+│   ├── constraint.sql         # 主码/候选码/外码/检查约束
 │   ├── crud.sql               # 增删改查
 │   ├── query.sql              # 多表连接查询
 │   ├── view.sql               # 统计视图

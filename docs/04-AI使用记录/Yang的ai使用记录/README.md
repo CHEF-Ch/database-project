@@ -73,3 +73,31 @@
 
 - `employee_id` 改为非空后，第 3 周 `01-schema.sql` 建表时按非空落；`docs/02` §3.1 第 5 行基数不变（仍为 1:N）。
 - 本次复核为**文档级核对**，未执行 SQL；建表后的约束验证仍待第 3、4 周。
+
+---
+
+## 第 4 周：约束重构 + 角色权限（sql/constraint.sql、sql/role.sql、sql/01-schema.sql）
+
+### 已发生的协作
+
+| # | 时间 | 我给了 AI 什么 | AI 输出了什么 | 我采纳/修改了什么 | 为什么 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 第4周 | 第四周任务要求 `constraint.sql` 是独立文件，已写好的 `01-schema.sql` 里主码/候选码/外码/CHECK 要不要抽出来 | 全量抽离方案：`01-schema.sql` 只留字段+非空+默认值，`constraint.sql` 用 `ALTER TABLE` 追加 17 主码+25 外码+6 候选码+45 CHECK，并附 16 条合法/非法测试 | 采纳；确认"全移"而非"只抽 CHECK" | 任务清单要 `constraint.sql` 独立成文件；全移避免同一约束在 01-schema 与 constraint 各存一份、两处不一致 |
+| 2 | 第4周 | 设计 4 个数据库角色（收银/制作/库存/店长）的最小权限 + 正反例测试 | `role.sql`：角色建权、4 演示用户（WITHOUT LOGIN）、13 条正反例（EXECUTE AS + 事务回滚） | 采纳 | 最小权限要能被"越权被拒"证明，正反例缺一不可 |
+
+### AI 输出中经实测纠正的点
+
+| # | 情形 | 处理 |
+| --- | --- | --- |
+| 1 | `constraint.sql` 的 16 条测试结果表 `#results` 全空（`total_tests=0`） | 根因：`INSERT INTO #results` 写进了会被 `ROLLBACK` 的事务里，回滚把结果行一起冲掉。改为"先把结果存局部变量→回滚→回滚后再写结果表" |
+| 2 | `role.sql` 反例 N04（制作员改订单金额）预期错误号 229，实测 230 | 根因：**列级** `UPDATE` 拒绝报 230，**表级**才报 229；制作员只有 `order_status` 列级授权，改 `total_amount` 属列级拒绝。把 N04 预期改为 230，并补注释区分两级错误号 |
+
+### 人工验证证据
+
+- 全链 `00→01-schema→constraint→02-seed→role` 五脚本 sqlcmd `-b` 退出码全 0。
+- `constraint.sql`：16/16 `ALL TESTS PASSED`；`role.sql`：13/13 `ALL TESTS PASSED`。
+- 结构指纹复现为 219 项（110 列+17 主码+3 唯一约束+3 筛选唯一索引+25 外码+45 CHECK+16 默认值），与第 3 周一致。证据见 `evidence/第4周-③约束重构-20261001.txt`、`evidence/第4周-④角色权限-20261001.txt`。
+
+### 待补充
+
+- 提交哈希（push 后回填到 `docs/05-组内分工.md` 与本节）。
