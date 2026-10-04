@@ -40,7 +40,8 @@ INSERT INTO item_material (material_id, name, unit, material_kind, stock_qty, re
 ('M0000004', N'椰果', N'克',   'ADDON',      2900,  25, 1000, 30),
 ('M0000005', N'布丁', N'克',   'ADDON',      1900,   0,  800, 15),
 ('M0000006', N'蔗糖', N'克',   'INGREDIENT', 9800,  20, 3000, NULL),
-('M0000007', N'杯具', N'个',   'INGREDIENT', 4900,   1, 1000, NULL);
+('M0000007', N'杯具', N'个',   'INGREDIENT', 4900,   1, 1000, NULL),
+('M0000008', N'红豆', N'克',   'INGREDIENT',  600,   0, 1000, NULL);  -- 第4周：低于安全库存，供 query.sql 库存预警查询演示非空结果
 GO
 
 -- 商品（杯型为商品固有属性：不同杯型不同商品不同价）
