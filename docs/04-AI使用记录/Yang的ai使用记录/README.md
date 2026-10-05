@@ -96,7 +96,7 @@
 
 - 全链 `00→01-schema→constraint→02-seed→role` 五脚本 sqlcmd `-b` 退出码全 0。
 - `constraint.sql`：16/16 `ALL TESTS PASSED`；`role.sql`：13/13 `ALL TESTS PASSED`。
-- 结构指纹复现为 219 项（110 列+17 主码+3 唯一约束+3 筛选唯一索引+25 外码+45 CHECK+16 默认值），与第 3 周一致。证据见 `evidence/第4周-③约束重构-20261001.txt`、`evidence/第4周-④角色权限-20261001.txt`。
+- 结构指纹复现为 219 项（110 列+17 主码+3 唯一约束+3 筛选唯一索引+25 外码+45 CHECK+16 默认值），与第 3 周一致。证据见 `result/第4周-③约束重构-20261001.txt`、`result/第4周-④角色权限-20261001.txt`。
 
 ### 待补充
 

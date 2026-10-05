@@ -37,7 +37,7 @@
 │   ├── query.sql              # 多表连接查询
 │   ├── view.sql               # 统计视图
 │   └── role.sql               # 角色与权限
-└── evidence/                  # 实际运行验证证据（sqlcmd 输出截图/文本）
+└── result/                    # 实际运行验证证据（sqlcmd 输出截图/文本）
 ```
 
 ## 环境与复现
