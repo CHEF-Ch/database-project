@@ -8,3 +8,4 @@
 | --- | --- |
 | Chen | [`Chen的ai使用记录/`](Chen的ai使用记录/) |
 | Yang | [`Yang的ai使用记录/`](Yang的ai使用记录/) |
+| zeng | [`zeng的ai使用记录/`](zeng的ai使用记录/) |
