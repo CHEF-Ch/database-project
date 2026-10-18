@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · MilkTeaShop{% endblock %}
+
+{% block content %}
+<h1>{{ title }}</h1>
+<div class="banner">
+  <p>本页是步骤 ② 的分层骨架占位，功能将在步骤 {{ step }} 实现。</p>
+  <p class="note">{{ detail }}</p>
+</div>
+<p><a class="btn" href="{{ url_for('main.index') }}">返回首页</a></p>
+{% endblock %}

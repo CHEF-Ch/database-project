@@ -1,0 +1,4 @@
+# 第七至九周 Web 应用依赖（Python 3.13 实测通过）
+# 安装：python -m pip install -r requirements.txt
+Flask>=3.0,<4.0
+pyodbc>=5.0,<6.0

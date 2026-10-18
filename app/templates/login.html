@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}登录 · MilkTeaShop{% endblock %}
+
+{% block content %}
+<h1>登录</h1>
+
+<form method="post" action="{{ url_for('auth.login') }}" class="form">
+  <label>用户名
+    <input name="username" maxlength="30" required autofocus>
+  </label>
+  <label>密码
+    <input name="password" type="password" maxlength="128" required>
+  </label>
+  <button class="btn primary" type="submit">登录</button>
+</form>
+
+<h2>演示账号</h2>
+<table class="table">
+  <thead><tr><th>用户名</th><th>角色</th></tr></thead>
+  <tbody>
+    {% for a in accounts %}
+    <tr><td><code>{{ a.username }}</code></td><td>{{ a.label }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="note">密码见 README「演示账号」表；代码中只保存密码哈希。</p>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}出错了 · {{ code }}{% endblock %}
+
+{% block content %}
+<h1>{{ message }}</h1>
+<p class="kv">错误码：<code>{{ code }}</code></p>
+<p class="kv">请求标识：<code>{{ request_id }}</code></p>
+<p class="note">
+  详细信息（SQL、堆栈、连接信息）只写入后端日志；
+  需要排查时请把上面的请求标识提供给管理员。
+</p>
+<p><a class="btn" href="{{ url_for('main.index') }}">返回首页</a></p>
+{% endblock %}

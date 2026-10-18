@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}首页 · MilkTeaShop{% endblock %}
+
+{% block content %}
+<h1>当前身份</h1>
+
+{% if role %}
+  <p class="kv">角色：<strong>{{ role_label }}</strong>（<code>{{ role }}</code>）</p>
+  <p class="kv">可执行权限点：</p>
+  <ul class="tags">
+    {% for p in permissions %}<li>{{ p }}</li>{% endfor %}
+  </ul>
+
+  <h2>可用入口</h2>
+  <div class="cards">
+    {% if 'product.read' in perms %}
+      <a class="card" href="{{ url_for('product.list_products') }}">商品</a>
+    {% endif %}
+    {% if 'inventory.read' in perms %}
+      <a class="card" href="{{ url_for('inventory.list_stock') }}">库存</a>
+    {% endif %}
+    {% if 'order.read' in perms or 'order.read_own' in perms %}
+      <a class="card" href="{{ url_for('order.list_orders') }}">订单</a>
+    {% endif %}
+  </div>
+  <p class="note">按钮按角色隐藏只是体验控制，真正的权限在后端与数据库层再校一次。</p>
+{% else %}
+  <p>请先 <a href="{{ url_for('auth.login') }}">登录</a>。</p>
+{% endif %}
+
+<h2>运行环境自检</h2>
+<p>
+  <a class="btn" href="{{ url_for('main.health') }}">GET /health</a>
+  —— 只读探针，返回库名与结构指纹（v1.0 应为 <code>236</code>）。
+</p>
+{% endblock %}

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MilkTeaShop v1.0{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('main.index') }}">MilkTeaShop <span>v1.0</span></a>
+    <nav>
+      {% if session.get('username') %}
+        <span class="who">{{ session.get('display') }} · {{ session.get('role') }}</span>
+        <a class="btn" href="{{ url_for('auth.logout') }}">退出</a>
+      {% else %}
+        <a class="btn" href="{{ url_for('auth.login') }}">登录</a>
+      {% endif %}
+    </nav>
+  </header>
+
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="foot">
+    <small>请求标识 {{ g.request_id }}　|　页面层 → 业务层 → 数据访问层 → SQL Server</small>
+  </footer>
+</body>
+</html>

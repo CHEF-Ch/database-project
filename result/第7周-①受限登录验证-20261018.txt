@@ -1,0 +1,81 @@
+================================================================================================
+第 7 周 ① 证据：混合认证 + 5 个受限 SQL 登录的数据库级权限实测
+================================================================================================
+生成时间：2026-10-18 20:34:46
+实例：.\SQLEXPRESS　库：MilkTeaShop_v01　驱动：ODBC Driver 18 for SQL Server
+前提：scripts/enable-mixed-auth.ps1 + sql/app_login.sql 已执行（混合模式）
+说明：所有写语句均为 no-op（SET 列 = 列）并在结束前回滚，不改变业务数据。
+
+#    登录               测试内容                                    预期    实际    结果
+------------------------------------------------------------------------------------------------
+T1   login_clerk      读商品（应有权限）                               ok    ok    PASS
+T2   login_clerk      改库存 stock_qty（应被拒）                      229   229   PASS
+T3   login_customer   写订单（应被拒）                                229   229   PASS
+T4   login_maker      改 order_status（应成功，列级授权）                ok    ok    PASS
+T5   login_maker      改 total_amount（应被拒，列级授权外）               230   230   PASS
+T6   login_stock      读会员表（应被拒）                               229   229   PASS
+T7   login_stock      调整库存（应成功）                               ok    ok    PASS
+T8   login_manager    建表 DDL（应被拒，业务管理≠DBA）                    262   262   PASS
+T9   login_customer   读商品（应有权限）                               ok    ok    PASS
+T10  login_manager    读库存 item_material（权限矩阵 inventory.read）  ok    ok    PASS
+T11  login_clerk      读销量统计视图                                 ok    ok    PASS
+T12  login_customer   读销量统计视图（应被拒，未授权）                        229   229   PASS
+T13  login_customer   自助下单：写订单头+明细+预占（应成功）                    ok    ok    PASS
+T14  login_customer   改 stock_qty（应被拒：只授到 reserved_qty，列级报 230）230   230   PASS
+T15  login_clerk      改订单状态（应成功，在收窄后的 8 列内）                   ok    ok    PASS
+T16  login_clerk      写退款额 refund_amount（应被拒：归店长审核，230）       230   230   PASS
+T17  login_manager    写退款额 refund_amount（应成功：店长审核退款）          ok    ok    PASS
+------------------------------------------------------------------------------------------------
+错误码：229 = 对象/列权限不足；230 = 列级权限不足；262 = 无 DDL 权限
+
+逐条明细：
+  T1 login_clerk — 读商品（应有权限）
+      预期 ok / 实际 ok → PASS
+      返回：login_clerk | 1 | 5
+  T2 login_clerk — 改库存 stock_qty（应被拒）
+      预期 229 / 实际 229 → PASS
+      返回：拒绝了对对象 'item_material' (数据库 'MilkTeaShop_v01'，架构 'dbo')的 UPDATE 权限。 (2
+  T3 login_customer — 写订单（应被拒）
+      预期 229 / 实际 229 → PASS
+      返回：拒绝了对对象 'shop_order' (数据库 'MilkTeaShop_v01'，架构 'dbo')的 UPDATE 权限。 (229)
+  T4 login_maker — 改 order_status（应成功，列级授权）
+      预期 ok / 实际 ok → PASS
+  T5 login_maker — 改 total_amount（应被拒，列级授权外）
+      预期 230 / 实际 230 → PASS
+      返回：拒绝了对对象“shop_order”(数据库“MilkTeaShop_v01”，架构“dbo”)的列“total_amount”的 UPDA
+  T6 login_stock — 读会员表（应被拒）
+      预期 229 / 实际 229 → PASS
+      返回：拒绝了对对象 'member_member' (数据库 'MilkTeaShop_v01'，架构 'dbo')的 SELECT 权限。 (2
+  T7 login_stock — 调整库存（应成功）
+      预期 ok / 实际 ok → PASS
+  T8 login_manager — 建表 DDL（应被拒，业务管理≠DBA）
+      预期 262 / 实际 262 → PASS
+      返回：在数据库 'MilkTeaShop_v01' 中拒绝了 CREATE TABLE 权限。 (262) (SQLExecDirectW)")
+  T9 login_customer — 读商品（应有权限）
+      预期 ok / 实际 ok → PASS
+      返回：login_customer | 1 | 5
+  T10 login_manager — 读库存 item_material（权限矩阵 inventory.read）
+      预期 ok / 实际 ok → PASS
+      返回：8
+  T11 login_clerk — 读销量统计视图
+      预期 ok / 实际 ok → PASS
+      返回：5
+  T12 login_customer — 读销量统计视图（应被拒，未授权）
+      预期 229 / 实际 229 → PASS
+      返回：拒绝了对对象 'v_product_sales_summary' (数据库 'MilkTeaShop_v01'，架构 'dbo')的 SEL
+  T13 login_customer — 自助下单：写订单头+明细+预占（应成功）
+      预期 ok / 实际 ok → PASS
+  T14 login_customer — 改 stock_qty（应被拒：只授到 reserved_qty，列级报 230）
+      预期 230 / 实际 230 → PASS
+      返回：拒绝了对对象“item_material”(数据库“MilkTeaShop_v01”，架构“dbo”)的列“stock_qty”的 UPDA
+  T15 login_clerk — 改订单状态（应成功，在收窄后的 8 列内）
+      预期 ok / 实际 ok → PASS
+  T16 login_clerk — 写退款额 refund_amount（应被拒：归店长审核，230）
+      预期 230 / 实际 230 → PASS
+      返回：拒绝了对对象“shop_order”(数据库“MilkTeaShop_v01”，架构“dbo”)的列“refund_amount”的 UPD
+  T17 login_manager — 写退款额 refund_amount（应成功：店长审核退款）
+      预期 ok / 实际 ok → PASS
+
+================================================================================================
+结论：全部符合预期（受限账户在数据库层确实生效）
+================================================================================================
