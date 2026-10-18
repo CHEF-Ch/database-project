@@ -13,6 +13,8 @@
 | `role.sql` | 创建角色与演示用户并授权 | 是（幂等） |
 | `crud.sql` | 增删改查演示（写入后回滚） | 是 |
 | `query.sql` | 多表连接 / 统计查询 | 是 |
+| `migration.sql` | 第六周：v0.1 → v1.0 结构迁移（在副本 `MilkTeaShop_v01` 上执行，源库不动） | 否——对已迁移库重跑会报"对象已存在" |
+| `regression.sql` | 第六周：迁移后回归（业务基准 / 口径 / 指纹 / 约束反例 / 角色权限） | 是 |
 
 > **`00-create.sql` 为什么必须先删再建**：`01-schema.sql`、`02-seed.sql`、`constraint.sql` **都只能在空库上跑**（表已存在会报错、数据重复会撞约束）。若 `00` 只在库不存在时创建，那么第二次复现就会失败——它必须**每次都把库恢复成空的**。这是"复现"与"重跑不报错"的区别。
 > 阶段一（1—4 周）不涉及真实数据，删库重建没有损失；`DROP` 前会先 `SET SINGLE_USER WITH ROLLBACK IMMEDIATE` 断开占用连接。
@@ -39,3 +41,18 @@ sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/query.sql
 > **脚本自带上下文与 SET 选项，命令无需再加 `-d` 或 `-I`**：每个脚本都在开头自己 `USE [MilkTeaShop]`（各脚本是独立一次 sqlcmd 进程，上下文不继承），并显式 `SET QUOTED_IDENTIFIER ON; SET ANSI_NULLS ON;`。
 > 后者不是可选项：`shop_order` / `member_member` / `member_balance_log` 三张表的候选码是**带筛选条件的唯一索引**（因为 `UNIQUE` 约束在 SQL Server 里只允许一个 NULL，与 `docs/02` §5.2"可空，多 NULL 不冲突"冲突），而 sqlcmd 默认 `QUOTED_IDENTIFIER = OFF`、SSMS 默认 `ON`——不写死就会"在 SSMS 里能跑、按上面的命令却报 `Msg 1934`"。
 > 这一处与另外 4 处缺陷的排查经过见 `docs/06-进度/第三周任务流程与状态.md` §六。
+
+## 阶段二迁移（第六周：v0.1 → v1.0）
+
+迁移不在源库上做：先按上面的顺序从空库复现 v0.1，**备份为副本 `MilkTeaShop_v01`**，再在副本上跑迁移与回归。
+
+```powershell
+# 1) 从空库复现 v0.1（00→01→constraint→seed→view→role），再备份为副本 MilkTeaShop_v01
+#    （SSMS「任务 → 备份」，或 BACKUP DATABASE [MilkTeaShop] TO DISK = '...bak' 后 RESTORE 为 MilkTeaShop_v01）
+# 2) 在副本上迁移：
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/migration.sql -o result/第6周-④迁移结果.txt
+# 3) 迁移后回归：
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/regression.sql -o result/第6周-⑤回归结果.txt
+```
+
+> `migration.sql` / `regression.sql` 各自开头 `USE [MilkTeaShop_v01]`，与 v0.1 的 8 个脚本（`USE [MilkTeaShop]`）分属两个库，互不影响。迁移把结构指纹从 **219 → 236**（+1 列 +15 CHECK +1 筛选唯一索引）。

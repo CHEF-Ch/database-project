@@ -38,7 +38,9 @@
 │   ├── crud.sql               # 增删改查
 │   ├── query.sql              # 多表连接查询
 │   ├── view.sql               # 统计视图
-│   └── role.sql               # 角色与权限
+│   ├── role.sql               # 角色与权限
+│   ├── migration.sql          # 第六周：v0.1 → v1.0 结构迁移（副本上执行）
+│   └── regression.sql         # 第六周：迁移后回归测试
 └── result/                    # 实际运行验证证据（sqlcmd 输出截图/文本）
 ```
 
@@ -55,6 +57,11 @@
 sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/00-create.sql
 sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/01-schema.sql
 # ……按需执行 constraint / seed / view / role / crud / query / test
+
+# 第二阶段 v1.0 迁移复现（第六周）：先备份 v0.1 为副本 MilkTeaShop_v01，
+# 再在副本上执行迁移与回归（源库不动，详见 sql/README.md）
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/migration.sql
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/regression.sql
 ```
 
 ## 提交入口
@@ -67,6 +74,7 @@ sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/01-schema.sql
 | 第三周：建库、CRUD | `sql/00-create.sql`、`sql/01-schema.sql`、`sql/crud.sql` |
 | 第四周：查询、视图、约束、权限 | `sql/query.sql`、`sql/view.sql`、`sql/constraint.sql`、`sql/role.sql` |
 | 第五周：ER 模型（ER 图、映射清单、问题清单） | `docs/07-ER模型/` |
+| 第六周：范式化与迁移 / 回归 | `docs/08-规范化/`、`sql/migration.sql`、`sql/regression.sql` |
 | 阶段报告 | `docs/03-阶段报告.md` |
 | AI 使用记录 | `docs/04-AI使用记录/`（按成员分子目录） |
 | 组内分工表 | `docs/05-组内分工.md` |

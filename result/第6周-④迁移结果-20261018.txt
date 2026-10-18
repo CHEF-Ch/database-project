@@ -1,0 +1,7 @@
+total_columns total_pk    total_uq_constraint total_uq_filtered_index total_fk    total_check total_default
+------------- ----------- ------------------- ----------------------- ----------- ----------- -------------
+          111          17                   3                       4          25          60            16
+expected                                                              verification_result                
+--------------------------------------------------------------------- -----------------------------------
+111 列 / 17 主码 / 3 UQ + 4 筛选唯一索引 / 25 外码 / 60 CHECK / 16 DEFAULT = 236 MATCH：v1.0 目标结构 236 项              
+migration.sql：v0.1 → v1.0 迁移完成（+1 列 +15 CHECK +1 筛选唯一索引，指纹 219 → 236）。
