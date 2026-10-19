@@ -66,7 +66,7 @@ sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/regression.sql -o result/第6�
 ```powershell
 # 可选：开启混合认证（使用受限 SQL 登录时才需要；需管理员）
 powershell -ExecutionPolicy Bypass -File scripts\enable-mixed-auth.ps1
-# 建登录 / 顾客角色 / 补授权（幂等，可重跑）
+# 建登录 / 顾客角色 / 补授权 / 店员 UPDATE 收窄（幂等，可重跑）
 sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/app_login.sql
 ```
 

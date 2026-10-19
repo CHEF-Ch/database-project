@@ -47,7 +47,7 @@
 │   ├── smoke_test.py          # ⑦的雏形：骨架用例 + 错误分类 + 真实启动，可写证据
 │   └── verify_db_logins.py    # ⑦的雏形：5 个受限登录的数据库级权限正/反例
 ├── sql/
-│   ├── 00-create.sql          # 建库（只创建、不删除已有库）
+│   ├── 00-create.sql          # 删库重建（先 DROP 后 CREATE），使脚本回到空库起点
 │   ├── 01-schema.sql          # 建表（字段/非空/默认值）
 │   ├── 02-seed.sql            # 样例数据
 │   ├── constraint.sql         # 主码/候选码/外码/检查约束

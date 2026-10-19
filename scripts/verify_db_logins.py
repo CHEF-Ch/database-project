@@ -23,9 +23,12 @@ import pyodbc
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-SERVER = os.environ.get("DB_SERVER", r".\SQLEXPRESS")
-DATABASE = os.environ.get("DB_NAME", "MilkTeaShop_v01")
-DRIVER = os.environ.get("DB_DRIVER", "ODBC Driver 18 for SQL Server")
+# 导入即加载 .env（Config 的类属性在 import 时求值，不能放在这之后读 env）
+from app.config import Config                        # noqa: E402
+
+SERVER = Config.DB_SERVER
+DATABASE = Config.DB_NAME
+DRIVER = Config.DB_DRIVER
 
 _DEMO = {
     "login_clerk": "Clerk#2026",
@@ -34,8 +37,7 @@ _DEMO = {
     "login_stock": "Stock#2026",
     "login_manager": "Mgr#2026",
 }
-PASSWORDS = {login: os.environ.get(f"DB_PWD_{login.upper()}", pwd) or pwd
-             for login, pwd in _DEMO.items()}
+PASSWORDS = {login: Config.password_for(login) or pwd for login, pwd in _DEMO.items()}
 
 
 def connect(login: str) -> pyodbc.Connection:

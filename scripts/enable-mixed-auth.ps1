@@ -25,7 +25,8 @@
 #Requires -RunAsAdministrator
 param(
     [string]$Instance = 'MSSQL17.SQLEXPRESS',
-    [string]$Service  = 'MSSQL$SQLEXPRESS'
+    [string]$Service  = 'MSSQL$SQLEXPRESS',
+    [string]$Server   = '.\SQLEXPRESS'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -56,7 +57,7 @@ Write-Host "重启后 LoginMode = $now"
 Write-Host '校验 IsIntegratedSecurityOnly（应为 0）：'
 
 # 不只打印：真断言一次，避免"看着像成功"
-$raw = & sqlcmd -S '.\SQLEXPRESS' -E -C -h -1 -W -Q "SET NOCOUNT ON; SELECT CAST(SERVERPROPERTY('IsIntegratedSecurityOnly') AS int);"
+$raw = & sqlcmd -S $Server -E -C -h -1 -W -Q "SET NOCOUNT ON; SELECT CAST(SERVERPROPERTY('IsIntegratedSecurityOnly') AS int);"
 $value = ($raw | Where-Object { $_ -match '^\s*\d+\s*$' } | Select-Object -First 1)
 if ($null -eq $value) { throw '无法读取 IsIntegratedSecurityOnly，请检查实例名与服务状态' }
 $value = $value.Trim()
@@ -64,4 +65,4 @@ Write-Host "IsIntegratedSecurityOnly = $value"
 if ($value -ne '0') { throw "混合模式未生效（IsIntegratedSecurityOnly = $value，应为 0）" }
 
 Write-Host '完成：混合模式已生效。'
-Write-Host '后续可执行：sqlcmd -S ''.\SQLEXPRESS'' -E -C -b -f 65001 -i sql/app_login.sql'
+Write-Host "后续可执行：sqlcmd -S '$Server' -E -C -b -f 65001 -i sql/app_login.sql"

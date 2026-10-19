@@ -20,3 +20,19 @@ def list_orders():
         step="③—⑤",
         detail="订单创建与查询、订单明细操作（制作员只改状态）",
     )
+
+
+@bp.get("/mine")
+@role_required("order.read_own")
+def my_orders():
+    """顾客/店员的"我的订单"。
+
+    ④ 实现时**必须**按 session 里的 member_id 过滤，否则就是全量越权
+    （role_customer 对 shop_order 是表级 SELECT，数据库不会拦）。
+    """
+    return render_template(
+        "placeholder.html",
+        title="我的订单",
+        step="③—⑤",
+        detail="按当前账号绑定的会员号过滤（应用层负责行级隔离）",
+    )

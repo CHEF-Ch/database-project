@@ -1,7 +1,7 @@
 ==========================================================================================
 第 7 周 ①② 骨架自检证据：v1.0 基线 + 运行环境 + 分层骨架
 ==========================================================================================
-生成时间：2026-10-18 20:34:49
+生成时间：2026-10-19 13:15:59
 Python 3.13.12　Flask 3.1.3　pyodbc 5.3.0　Werkzeug 3.1.9
 连接配置：DB_AUTH=trusted　DB_NAME=MilkTeaShop_v01　USER_STORE=config
 
@@ -48,12 +48,14 @@ POST /login customer1                      302   302  PASS
 GET /products/ （顾客）                        200   200  PASS  
 GET /inventory/ （顾客）                       403   403  PASS  
 GET /orders/ （顾客）                          403   403  PASS  
+GET /orders/mine （顾客）                      200   200  PASS  
 GET /logout                                302   302  PASS  
 POST /login manager1                       302   302  PASS  
 GET /orders/ （店长）                          200   200  PASS  
 GET /inventory/ （店长）                       200   200  PASS  
 POST /login maker1                         302   302  PASS  
 GET /inventory/ （制作员）                      403   403  PASS  
+GET /orders/mine （制作员）                     403   403  PASS  
 GET /logout                                302   302  PASS  
 POST /login stock1                         302   302  PASS  
 GET /orders/ （库存）                          403   403  PASS  
@@ -85,6 +87,10 @@ HTTP 503（预期 503）
 (230) 列级权限不足                             E2003     E2003  PASS
 (18456) 登录失败                             E5001     E5001  PASS
 [23000] SQLSTATE 完整性违反                   E5002     E5002  PASS
+
+【6】v1.0 指纹判定（必须 match=True 才能算通过）
+------------------------------------------------------------------------------------------
+total=236  expected=236  match=True  → PASS
 
 ==========================================================================================
 结论：全部通过

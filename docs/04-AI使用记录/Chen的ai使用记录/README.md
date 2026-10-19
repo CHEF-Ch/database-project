@@ -229,7 +229,7 @@
 - **v1.0 基线**：本机 `BACKUP MilkTeaShop` → `RESTORE` 为副本 `MilkTeaShop_v01` → `migration.sql`，指纹 **219 → 236 MATCH**；`order_item_addon.addon_price` 回填 3 行、无 NULL；业务行数不变（7 单 / 12 明细 / 36 流水）；源库 `MilkTeaShop` 仍为 v0.1（110 列 / 45 CHECK）。
 - **分层骨架**：20 项用例全过（未登录 401、顾客越权 403、授权 200、缺字段 400、密码错 401）；`/health` 返回指纹 236、`match=true`；真实 `python run.py` 启动后 curl 复核一致；数据库连接失败返回 503，响应体**不含**库名/驱动/服务器/认证信息。
 - **受限账户**：开启混合认证（`LoginMode=2`、`IsIntegratedSecurityOnly=0`）后，9 项数据库级正/反例全部符合预期——店员读商品 OK/改库存 229；顾客读商品 OK/写订单 229；制作员改 `order_status` OK/改 `total_amount` 230；库存调库存 OK/读会员 229；店长建表 262。
-- 证据文件：`result/第7周-①②-骨架自检-20261018.txt`、`result/第7周-①受限登录验证-20261018.txt`。
+- 证据文件：`result/第7周-①②-骨架自检-20261019.txt`、`result/第7周-①受限登录验证-20261019.txt`。
 
 ### 不采纳 / 留待
 

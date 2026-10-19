@@ -70,12 +70,14 @@ def build_cases(client):
         ("GET /products/ （顾客）", client.get("/products/"), 200),
         ("GET /inventory/ （顾客）", client.get("/inventory/"), 403),
         ("GET /orders/ （顾客）", client.get("/orders/"), 403),
+        ("GET /orders/mine （顾客）", client.get("/orders/mine"), 200),
         ("GET /logout", client.get("/logout"), 302),
         ("POST /login manager1", client.post("/login", data={"username": "manager1", "password": "mgr123"}), 302),
         ("GET /orders/ （店长）", client.get("/orders/"), 200),
         ("GET /inventory/ （店长）", client.get("/inventory/"), 200),
         ("POST /login maker1", client.post("/login", data={"username": "maker1", "password": "maker123"}), 302),
         ("GET /inventory/ （制作员）", client.get("/inventory/"), 403),
+        ("GET /orders/mine （制作员）", client.get("/orders/mine"), 403),
         ("GET /logout", client.get("/logout"), 302),
         ("POST /login stock1", client.post("/login", data={"username": "stock1", "password": "stock123"}), 302),
         ("GET /orders/ （库存）", client.get("/orders/"), 403),
@@ -215,11 +217,19 @@ def render(rows, health, bad_resp, bad_body, leak, real_rows, classify_rows, con
     for label, expect, actual, status in classify_rows:
         w(f"{label:<34}{expect:>12}{actual:>10}  {status}")
     w("")
+    fp = health.get("fingerprint") or {}
+    fp_ok = bool(fp.get("match")) and fp.get("total") == fp.get("expected_v1_0")
+    w("【6】v1.0 指纹判定（必须 match=True 才能算通过）")
+    w("-" * 90)
+    w(f"total={fp.get('total')}  expected={fp.get('expected_v1_0')}  match={fp.get('match')}  → "
+      + ("PASS" if fp_ok else "FAIL"))
+    w("")
     ok = (
         all(r[3] == "PASS" for r in rows)
         and not leak
         and all(r[3] == "PASS" for r in real_rows)
         and all(r[3] == "PASS" for r in classify_rows)
+        and fp_ok
     )
     w("=" * 90)
     w("结论：" + ("全部通过" if ok else "存在失败项，需修复"))
@@ -241,6 +251,8 @@ def main() -> int:
     for label, expect, actual, status in classify_rows:
         print(f"[{status}] {label}: {actual} (expect {expect})")
     print("\nRESULT:", "ALL CHECKS PASSED" if ok else "SOME CHECKS FAILED")
+    fp = health.get("fingerprint") or {}
+    print(f"fingerprint: total={fp.get('total')} expected={fp.get('expected_v1_0')} match={fp.get('match')}")
 
     if write:
         name = f"第7周-①②-骨架自检-{dt.date.today():%Y%m%d}.txt"

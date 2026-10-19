@@ -19,8 +19,11 @@
     {% if 'inventory.read' in perms %}
       <a class="card" href="{{ url_for('inventory.list_stock') }}">库存</a>
     {% endif %}
-    {% if 'order.read' in perms or 'order.read_own' in perms %}
+    {% if 'order.read' in perms %}
       <a class="card" href="{{ url_for('order.list_orders') }}">订单</a>
+    {% endif %}
+    {% if 'order.read_own' in perms %}
+      <a class="card" href="{{ url_for('order.my_orders') }}">我的订单</a>
     {% endif %}
   </div>
   <p class="note">按钮按角色隐藏只是体验控制，真正的权限在后端与数据库层再校一次。</p>
