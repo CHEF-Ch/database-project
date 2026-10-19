@@ -1,0 +1,18 @@
+# 第 7 周后端日志样例（脱敏节选，来源 logs/app.log）
+# 生成：scripts 之外的一次性抽取；仅保留每类错误码/路径各一条 + 启动与成功各若干条
+# 已脱敏：Windows 账号 → <windows-user>；测试用不存在库 → <missing-db>；超长 ODBC 明细截断到 210 字符
+# 说明：logs/app.log 本身仍被 .gitignore 排除；本文件是唯一入库的例外（.gitignore 有 !result/*.log）
+
+2026-10-18 18:32:39,025 INFO [app] 应用启动 db=MilkTeaShop_v01 auth=trusted user_store=config
+2026-10-18 18:32:39,529 INFO [app] rid=164e2f3227bf role=anonymous GET /health -> 200
+2026-10-18 18:32:39,537 INFO [app] rid=d58d449911c6 role=anonymous GET / -> 200
+2026-10-18 18:32:39,538 WARNING [app] rid=0d630237ee76 code=E2001 status=401 path=/products/ detail=-
+2026-10-18 18:32:39,614 WARNING [app] rid=c2331243821d code=E2002 status=401 path=/login detail=login failed: clerk1
+2026-10-18 18:32:39,615 WARNING [app] rid=13a46f980a88 code=E1001 status=400 path=/login detail=-
+2026-10-18 18:32:39,776 WARNING [app] rid=707850aa4620 code=E2003 status=403 path=/inventory/ detail=role=customer lacks inventory.read
+2026-10-18 18:32:39,777 WARNING [app] rid=8a379b3e7236 code=E2003 status=403 path=/orders/ detail=role=customer lacks order.read
+2026-10-18 18:32:43,290 INFO [app] 应用启动 db=<missing-db> auth=trusted user_store=config
+2026-10-18 18:32:43,355 WARNING [app] rid=1ea769203377 code=E5001 status=503 path=/health detail=('28000', '[28000] [Microsoft][ODBC Driver 18 for SQL Server][SQL Server]用户 \'<windows-user>\' 登录失败。 (18456) (...
+2026-10-18 18:59:38,736 WARNING [app] rid=f11f72abd3ef code=E2001 status=401 path=/inventory/ detail=-
+2026-10-18 18:59:38,736 WARNING [app] rid=bd44d8fde238 code=E2001 status=401 path=/orders/ detail=-
+2026-10-19 13:15:28,300 WARNING [app] rid=4249de72a8d0 code=E2003 status=403 path=/orders/mine detail=role=maker lacks order.read_own
