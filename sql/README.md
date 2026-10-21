@@ -15,7 +15,7 @@
 | `query.sql` | 多表连接 / 统计查询 | 是 |
 | `migration.sql` | 第六周：v0.1 → v1.0 结构迁移（在副本 `MilkTeaShop_v01` 上执行，源库不动） | 否——对已迁移库重跑会报"对象已存在" |
 | `regression.sql` | 第六周：迁移后回归（业务基准 / 口径 / 指纹 / 约束反例 / 角色权限） | 是 |
-| `app_login.sql` | 第七至九周：在 **v1.0 副本**上建 5 个受限 SQL 登录 + 新建 `role_customer`（可自助下单）+ 补齐 3 处授权缺口 + 统计视图授权 + **把 `role_cashier` 对 `shop_order` 的 UPDATE 收窄为 8 列**（退款列仅店长可写） | 是（幂等） |
+| `app_login.sql` | 第七至九周：在 **v1.0 副本**上建 5 个业务 SQL 登录 + `login_app` 写事务账户 + 新建 `role_customer`（可自助下单）与 `role_app` + 补齐授权缺口 + 统计视图授权 + **把 `role_cashier` 对 `shop_order` 的 UPDATE 收窄为 8 列**（退款列仅店长可写） | 是（幂等） |
 
 > **`00-create.sql` 为什么必须先删再建**：`01-schema.sql`、`02-seed.sql`、`constraint.sql` **都只能在空库上跑**（表已存在会报错、数据重复会撞约束）。若 `00` 只在库不存在时创建，那么第二次复现就会失败——它必须**每次都把库恢复成空的**。这是"复现"与"重跑不报错"的区别。
 > 阶段一（1—4 周）不涉及真实数据，删库重建没有损失；`DROP` 前会先 `SET SINGLE_USER WITH ROLLBACK IMMEDIATE` 断开占用连接。

@@ -1,0 +1,52 @@
+﻿================================================================================
+第 7 周 步骤 ③ 数据访问层（DAO）自检证据
+================================================================================
+生成时间：2026-10-21
+环境：Python 3.13.12 / Flask 3.1.3 / pyodbc 5.3.0 / SQL Server 17.0.1000.7
+数据库：MilkTeaShop_v01（v1.0，结构指纹 236）
+命令：python scripts/dao_test.py
+说明：37 项 DAO 用例；所有写操作在事务内执行并在退出时回滚，业务行数不变（IDENTITY 计数器会前进）。
+================================================================================
+
+test_adjust_stock_preserves_reserved (__main__.DaoGuardTests.test_adjust_stock_preserves_reserved) ... ok
+test_cancel_order_with_stock (__main__.DaoGuardTests.test_cancel_order_with_stock) ... ok
+test_confirm_order_stock_idempotent (__main__.DaoGuardTests.test_confirm_order_stock_idempotent) ... ok
+test_coupon_cross_order_rejected (__main__.DaoGuardTests.test_coupon_cross_order_rejected) ... ok
+test_deduct_order_stock_idempotent (__main__.DaoGuardTests.test_deduct_order_stock_idempotent) ... ok
+test_duplicate_product_2627 (__main__.DaoGuardTests.test_duplicate_product_2627) ... ok
+test_error_classification_tx_and_unknown (__main__.DaoGuardTests.test_error_classification_tx_and_unknown) ... ok
+test_for_update_branches (__main__.DaoGuardTests.test_for_update_branches) ... ok
+test_loss_log_type (__main__.DaoGuardTests.test_loss_log_type) ... ok
+test_negative_qty_rejected (__main__.DaoGuardTests.test_negative_qty_rejected) ... ok
+test_order_detail_for_member (__main__.DaoGuardTests.test_order_detail_for_member) ... ok
+test_paired_member_helpers (__main__.DaoGuardTests.test_paired_member_helpers) ... ok
+test_points_balance_no_overdraw (__main__.DaoGuardTests.test_points_balance_no_overdraw) ... ok
+test_refund_and_status_guards (__main__.DaoGuardTests.test_refund_and_status_guards) ... ok
+test_usable_coupon_filters (__main__.DaoGuardTests.test_usable_coupon_filters) ... ok
+test_utils_normalise (__main__.DaoGuardTests.test_utils_normalise) ... ok
+test_fingerprint (__main__.DaoReadTests.test_fingerprint) ... ok
+test_inventory_reads (__main__.DaoReadTests.test_inventory_reads) ... ok
+test_member_reads (__main__.DaoReadTests.test_member_reads) ... ok
+test_order_parameterized (__main__.DaoReadTests.test_order_parameterized) ... ok
+test_order_reads (__main__.DaoReadTests.test_order_reads) ... ok
+test_product_parameterized (__main__.DaoReadTests.test_product_parameterized) ... ok
+test_product_reads (__main__.DaoReadTests.test_product_reads) ... ok
+test_report_queries (__main__.DaoReadTests.test_report_queries) ... ok
+test_adjust_stock_rejects_negative (__main__.DaoWriteTests.test_adjust_stock_rejects_negative) ... ok
+test_adjust_stock_with_log (__main__.DaoWriteTests.test_adjust_stock_with_log) ... ok
+test_constraint_error_classified (__main__.DaoWriteTests.test_constraint_error_classified) ... ok
+test_coupon_flow (__main__.DaoWriteTests.test_coupon_flow) ... ok
+test_member_points_and_balance (__main__.DaoWriteTests.test_member_points_and_balance) ... ok
+test_order_cancel (__main__.DaoWriteTests.test_order_cancel) ... ok
+test_order_payment_guard (__main__.DaoWriteTests.test_order_payment_guard) ... ok
+test_order_write_flow (__main__.DaoWriteTests.test_order_write_flow) ... ok
+test_platform_order_insert (__main__.DaoWriteTests.test_platform_order_insert) ... ok
+test_product_write_and_rollback (__main__.DaoWriteTests.test_product_write_and_rollback) ... ok
+test_restock_flow (__main__.DaoWriteTests.test_restock_flow) ... ok
+test_stock_actions (__main__.DaoWriteTests.test_stock_actions) ... ok
+test_transaction_rollback_on_exception (__main__.DaoWriteTests.test_transaction_rollback_on_exception) ... ok
+
+----------------------------------------------------------------------
+Ran 37 tests in 1.066s
+
+OK

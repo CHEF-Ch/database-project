@@ -52,6 +52,7 @@ class Config:
     DB_NAME: str = os.environ.get("DB_NAME", "MilkTeaShop_v01")
     DB_DRIVER: str = os.environ.get("DB_DRIVER", "ODBC Driver 18 for SQL Server")
     DB_TIMEOUT: int = int(os.environ.get("DB_TIMEOUT", "5"))
+    DB_QUERY_TIMEOUT: int = int(os.environ.get("DB_QUERY_TIMEOUT", "15"))
 
     # ---- 用户存储 ----
     USER_STORE: str = os.environ.get("USER_STORE", "config").lower()  # config | db
@@ -63,6 +64,7 @@ class Config:
         "maker": "login_maker",
         "stock": "login_stock",
         "manager": "login_manager",
+        "app": "login_app",          # 写事务统一账户（下单/支付/扣料/积分/余额/券）
     }
 
     @classmethod

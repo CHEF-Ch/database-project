@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from typing import Iterator
 
@@ -16,6 +17,8 @@ import pyodbc
 
 from app.config import Config
 from app.errors import AppError, ErrCode, classify_db_error
+
+logger = logging.getLogger(__name__)
 
 # v1.0 目标结构指纹（第六周声明：111 列 + 17 主码 + 3 UQ + 4 筛选唯一索引 +
 # 25 外码 + 60 CHECK + 16 DEFAULT = 236）
@@ -65,11 +68,17 @@ def build_connection_string(role: str | None) -> str:
 
 def connect(role: str | None = None) -> pyodbc.Connection:
     try:
-        return pyodbc.connect(
+        conn = pyodbc.connect(
             build_connection_string(role),
             autocommit=False,
             timeout=Config.DB_TIMEOUT,
         )
+        # 锁等待/查询超时：避免一个长事务把 Flask 工作线程无限挂住。
+        conn.timeout = Config.DB_QUERY_TIMEOUT
+        # XACT_ABORT ON：语句级错误直接 doom 事务，防止“吞异常后继续提交”。
+        with conn.cursor() as cur:
+            cur.execute("SET XACT_ABORT ON")
+        return conn
     except pyodbc.Error as exc:            # 连接失败：统一转友好提示，细节只进日志
         raise classify_db_error(exc) from exc
 
@@ -80,10 +89,12 @@ def db_cursor(role: str | None = None, *, commit: bool = False) -> Iterator[pyod
 
     用法（③ 起所有 DAO 都走这里）::
 
-        with db_cursor("clerk", commit=True) as cur:
+        with db_cursor("app", commit=True) as cur:
             cur.execute("INSERT ... VALUES (?, ?)", a, b)
 
-    成功且 commit=True 时提交；任何异常一律回滚；游标与连接必定关闭。
+    - commit=True：成功提交；
+    - commit=False：成功也显式回滚（只读/自检用），不要用它做写操作；
+    - 任何异常一律回滚；游标与连接必定关闭。
     """
     conn = connect(role)
     cur = None
@@ -91,12 +102,21 @@ def db_cursor(role: str | None = None, *, commit: bool = False) -> Iterator[pyod
         cur = conn.cursor()
         yield cur
         if commit:
-            conn.commit()
+            try:
+                conn.commit()
+            except pyodbc.Error as exc:
+                raise AppError(ErrCode.TX_FAILED, detail=str(exc)) from exc
+        else:
+            # 显式回滚：不依赖 ODBC 断开时的隐式行为。
+            try:
+                conn.rollback()
+            except pyodbc.Error:
+                logger.exception("db_cursor: 显式回滚失败（连接可能已断）")
     except BaseException as exc:
         try:
             conn.rollback()
-        except pyodbc.Error:              # 连接已断时回滚会再报错，忽略
-            pass
+        except pyodbc.Error:              # 连接已断时回滚会再报错；留痕而不是静默
+            logger.exception("db_cursor: 异常路径回滚失败（连接可能已断）")
         if isinstance(exc, pyodbc.Error):
             raise classify_db_error(exc) from exc
         raise

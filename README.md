@@ -46,8 +46,10 @@
 │   ├── week3_seed_check.sql   # 第三周④样例数据复核：17表行数/订单覆盖/快照一致性（只读）
 │   ├── create_v01_copy.sql    # 由 v0.1 源库重建迁移副本（可重复执行，路径不写死）
 │   ├── enable-mixed-auth.ps1  # 一次性开启 SQL Server 混合认证（使用受限登录时）
+│   ├── dao_test.py            # ③ DAO 自检：37 项读写/回滚/幂等/约束分类（事务内回滚）
+│   ├── dao_roles_test.py      # ③ DAO 角色自检：DB_AUTH=sql 下 7 组角色路径（含 role_app）
 │   ├── smoke_test.py          # ⑦的雏形：骨架用例 + 错误分类 + 真实启动，可写证据
-│   └── verify_db_logins.py    # ⑦的雏形：5 个受限登录的数据库级权限正/反例
+│   └── verify_db_logins.py    # ⑦的雏形：5 个业务登录（不含 login_app）的数据库级权限正/反例
 ├── sql/
 │   ├── 00-create.sql          # 删库重建（先 DROP 后 CREATE），使脚本回到空库起点
 │   ├── 01-schema.sql          # 建表（字段/非空/默认值）

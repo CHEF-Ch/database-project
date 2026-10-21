@@ -93,6 +93,7 @@ _SQLSTATE_RE = re.compile(r"\[(\d{2}[0-9A-Z]{3})\]")
 
 _DB_CONSTRAINT_NUMS = {"547", "2601", "2627", "2628", "515", "8152", "8115", "245", "241", "8114"}
 _DB_FORBIDDEN_NUMS = {"229", "230", "262", "297", "15247"}
+_DB_TX_NUMS = {"1205", "1222"}          # 死锁牺牲者 / 锁超时
 _DB_UNAVAILABLE_NUMS = {"18456", "4060", "233", "10054", "40613", "53"}
 _DB_UNAVAILABLE_STATES = {"08001", "08S01", "HYT00", "HYT01", "IM002", "IM003"}
 
@@ -100,7 +101,7 @@ _DB_UNAVAILABLE_STATES = {"08001", "08S01", "HYT00", "HYT01", "IM002", "IM003"}
 def classify_db_error(exc: BaseException) -> AppError:
     """把 pyodbc/ODBC 异常归类为统一错误码（明细只进日志）。
 
-    判定顺序：约束类 → 权限类 → 连接类 → 其他（按连接失败处理）。
+    判定顺序：约束类 → 事务类 → 权限类 → 连接类 → 其他（按内部错误处理）。
     约束类必须先判，否则 2627 会被 262 先命中。
     """
     text = str(exc)
@@ -109,11 +110,14 @@ def classify_db_error(exc: BaseException) -> AppError:
 
     if any(state.startswith("23") for state in states) or (numbers & _DB_CONSTRAINT_NUMS):
         return AppError(ErrCode.DB_CONSTRAINT, detail=text)
+    if (numbers & _DB_TX_NUMS) or any(state.startswith("40") for state in states):
+        return AppError(ErrCode.TX_FAILED, detail=text)
     if numbers & _DB_FORBIDDEN_NUMS:
         return AppError(ErrCode.FORBIDDEN, detail=text)
     if (numbers & _DB_UNAVAILABLE_NUMS) or (states & _DB_UNAVAILABLE_STATES):
         return AppError(ErrCode.DB_UNAVAILABLE, detail=text)
-    return AppError(ErrCode.DB_UNAVAILABLE, detail=text)
+    # 未知的数据库错误更可能是 schema/代码缺陷，不应伪装成“服务暂不可用”
+    return AppError(ErrCode.INTERNAL, detail=text)
 
 
 def wants_json() -> bool:
