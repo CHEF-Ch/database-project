@@ -42,6 +42,8 @@
 │   ├── templates/             #   Jinja2 模板
 │   └── static/                #   样式等静态资源
 ├── scripts/
+│   ├── week3_review_b.sql     # 第三周③方向B复核：9条新增CHECK + unit 类型（DML 全部 ROLLBACK）
+│   ├── week3_seed_check.sql   # 第三周④样例数据复核：17表行数/订单覆盖/快照一致性（只读）
 │   ├── create_v01_copy.sql    # 由 v0.1 源库重建迁移副本（可重复执行，路径不写死）
 │   ├── enable-mixed-auth.ps1  # 一次性开启 SQL Server 混合认证（使用受限登录时）
 │   ├── smoke_test.py          # ⑦的雏形：骨架用例 + 错误分类 + 真实启动，可写证据

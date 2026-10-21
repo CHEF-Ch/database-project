@@ -1,0 +1,70 @@
+﻿================================================================================
+第 3 周 步骤 ③ 方向 B —— 复核记录（Chen）
+================================================================================
+复核对象：提交 1171956 对 sql/01-schema.sql 的改动
+          · 新增 9 条 CHECK
+          · item_material.unit 由 VARCHAR(10) 改为 NVARCHAR(10)
+复核日期：2026-10-21
+复核方式：从运行库 MilkTeaShop 反向验证约束是否真的在拦；
+          每条用例都在事务内执行并 ROLLBACK，库数据未改动。
+复核环境：SQL Server 17.0.1000.7 / .\SQLEXPRESS / MilkTeaShop（v0.1）
+可复跑：  sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i scripts/week3_review_b.sql
+          （sqlcmd 输出为 GBK，本文件已转存为 UTF-8）
+复核人：  Chen
+================================================================================
+
+【B5 基线完整性与结构总量（脚本外核对）】
+  基线（git show 8520014:sql/01-schema.sql）CHECK 名称数：36
+  当前（sql/constraint.sql）CHECK 名称数：45
+  新增：9 条
+    CK_inv_restock_received
+    CK_item_material_reserved_le_stock
+    CK_item_material_unit
+    CK_member_point_log_order
+    CK_mkt_coupon_rule_discount
+    CK_mkt_coupon_rule_threshold
+    CK_mkt_coupon_rule_valid
+    CK_order_platform_delivery_fee
+    CK_shop_order_total_amount
+  删除：0 条
+  运行库 sys.check_constraints：45 条；与 constraint.sql 名称双向比对：缺 0 / 多 0
+  结论：36 条基线一条未少，新增恰好 9 条，总计 45 条。
+
+【B1—B4 实测输出】
+  说明：B1 为 9 条新增 CHECK 的逐条负例（期望 547）；B2 为 unit 三个合法取值；
+        B3 为免单券边界 discount == threshold；B4 为两条 OR 双向蕴含的四组取值。
+        所有 DML 均已 ROLLBACK，运行库数据未变。
+--------------------------------------------------------------------------------
+已将数据库上下文更改为 "MilkTeaShop"。
+id         item                                                                                                                                                                                                     expect      actual      result
+---------- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- ----------- ----------- ------
+B1-1       CK_item_material_reserved_le_stock：reserved_qty > stock_qty                                                                                                                                                      547         547 PASS  
+B1-2       CK_inv_restock_received：RECEIVED 但 received_at 为 NULL                                                                                                                                                            547         547 PASS  
+B1-3       CK_member_point_log_order：EARN_SALE 但 order_id 为 NULL                                                                                                                                                            547         547 PASS  
+B1-4       CK_mkt_coupon_rule_threshold：threshold_amount = 0                                                                                                                                                                547         547 PASS  
+B1-5       CK_mkt_coupon_rule_discount：discount_amount > threshold_amount                                                                                                                                                   547         547 PASS  
+B1-6       CK_mkt_coupon_rule_valid：valid_to < valid_from                                                                                                                                                                   547         547 PASS  
+B1-7       CK_shop_order_total_amount：total_amount = -1                                                                                                                                                                     547         547 PASS  
+B1-8       CK_order_platform_delivery_fee：delivery_fee = -1                                                                                                                                                                 547         547 PASS  
+B1-9       CK_item_material_unit：unit = N'千克'                                                                                                                                                                               547         547 PASS  
+B2-1       unit = N'克' 应放行                                                                                                                                                                                                    0           0 PASS  
+B2-2       unit = N'毫升' 应放行                                                                                                                                                                                                   0           0 PASS  
+B2-3       unit = N'个' 应放行                                                                                                                                                                                                    0           0 PASS  
+B3         CK_mkt_coupon_rule_discount：discount_amount = threshold_amount 应放行                                                                                                                                                 0           0 PASS  
+B4a-1      received_at=NULL + RECEIVED 应拒                                                                                                                                                                                   547         547 PASS  
+B4a-2      received_at=非NULL + PENDING 应拒                                                                                                                                                                                   547         547 PASS  
+B4a-3      received_at=非NULL + RECEIVED 应放行                                                                                                                                                                                   0           0 PASS  
+B4a-4      received_at=NULL + PENDING 应放行                                                                                                                                                                                     0           0 PASS  
+B4b-1      order_id=非NULL + EARN_RECHARGE 应拒                                                                                                                                                                                547         547 PASS  
+B4b-2      order_id=NULL + EARN_SALE 应拒                                                                                                                                                                                     547         547 PASS  
+B4b-3      order_id=NULL + EARN_RECHARGE 应放行                                                                                                                                                                                  0           0 PASS  
+B4b-4      order_id=非NULL + EARN_SALE 应放行                                                                                                                                                                                     0           0 PASS  
+item    type_name                                                                                                                        len_chars   is_nullable
+------- -------------------------------------------------------------------------------------------------------------------------------- ----------- -----------
+B2-type nvarchar                                                                                                                                  10           0
+item     check_count
+-------- -----------
+B5-count          45
+total       passed      failed      result          
+----------- ----------- ----------- ----------------
+         21          21           0 ALL TESTS PASSED
