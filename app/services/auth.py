@@ -44,6 +44,7 @@ class ConfigUserStore(UserStore):
             "role": record["role"],
             "display": record.get("display", username),
             "member_id": record.get("member_id"),
+            "employee_id": record.get("employee_id"),
         }
 
 

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}库存流水 · MilkTeaShop{% endblock %}
+
+{% block content %}
+<h1>库存流水</h1>
+
+<form method="get" class="form inline">
+  <label>原料编号
+    <input name="material_id" value="{{ material_id }}" placeholder="如 M0000001">
+  </label>
+  <button class="btn" type="submit">筛选</button>
+</form>
+
+<table class="table wide">
+  <thead><tr><th>流水号</th><th>原料</th><th>类型</th><th>数量</th><th>订单</th><th>补货单</th><th>经办</th><th>时间</th></tr></thead>
+  <tbody>
+    {% for l in logs %}
+    <tr>
+      <td>{{ l.stock_log_id }}</td>
+      <td>{{ l.material_name }}</td>
+      <td>{{ l.log_type }}</td>
+      <td>{{ l.qty }}</td>
+      <td>{% if l.order_id %}<code>{{ l.order_id }}</code>{% endif %}</td>
+      <td>{% if l.restock_id %}<code>{{ l.restock_id }}</code>{% endif %}</td>
+      <td>{{ l.employee_id }}</td>
+      <td>{{ l.created_at }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8" class="note">暂无流水。</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<p><a class="btn" href="{{ url_for('inventory.list_stock') }}">返回库存</a></p>
+{% endblock %}

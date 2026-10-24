@@ -589,3 +589,19 @@ def receive_restock(
     assert result is not None
     result["items"] = list_restock_items(cur, restock_id)
     return result
+
+
+def list_restocks(cur, *, limit: int | None = 100, offset: int | None = 0) -> list[dict[str, Any]]:
+    """补货单列表（按创建时间倒序，供验收页展示）。"""
+    cur.execute(
+        """
+        SELECT restock_id, supplier_name, restock_status, employee_id,
+               created_at, received_at
+        FROM dbo.inv_restock
+        ORDER BY created_at DESC, restock_id DESC
+        OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
+        """,
+        normalise_offset(offset),
+        normalise_limit(limit),
+    )
+    return rows_to_dicts(cur)

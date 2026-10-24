@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}库存 · MilkTeaShop{% endblock %}
+
+{% block content %}
+<h1>库存</h1>
+
+<form method="get" class="form inline">
+  <label>名称
+    <input name="q" value="{{ q }}" placeholder="搜索原料名">
+  </label>
+  <label class="check">
+    <input type="checkbox" name="low_stock" value="1" {% if low_stock %}checked{% endif %}> 仅低库存
+  </label>
+  <button class="btn" type="submit">筛选</button>
+</form>
+
+<p class="note">
+  <a href="{{ url_for('inventory.stock_logs') }}">库存流水</a>
+  {% if 'restock.create' in perms %} · <a href="{{ url_for('inventory.restocks') }}">补货单管理</a>{% endif %}
+</p>
+
+{% if 'inventory.adjust' in perms %}
+<h2>调整库存</h2>
+<form method="post" action="{{ url_for('inventory.adjust_stock') }}" class="form inline">
+  <label>原料
+    <select name="material_id">
+      {% for m in all_materials %}
+        <option value="{{ m.material_id }}">{{ m.material_id }} · {{ m.name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>增减量
+    <input name="delta" type="number" step="0.01" required placeholder="正数入库 / 负数出库">
+  </label>
+  <button class="btn primary" type="submit">调整</button>
+</form>
+<p class="note">正数记 GAIN、负数记 SHORT，与库存流水同事务写入。</p>
+{% endif %}
+
+<table class="table wide">
+  <thead>
+    <tr><th>编号</th><th>名称</th><th>单位</th><th>类型</th><th>现存</th><th>预占</th><th>可售</th><th>安全库存</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for m in materials %}
+    <tr>
+      <td><code>{{ m.material_id }}</code></td>
+      <td>{{ m.name }}</td>
+      <td>{{ m.unit }}</td>
+      <td>{% if m.material_kind == 'ADDON' %}加料{% else %}原料{% endif %}</td>
+      <td>{{ m.stock_qty }}</td>
+      <td>{{ m.reserved_qty }}</td>
+      <td>{{ m.available_qty }}</td>
+      <td>{{ m.safety_stock }}</td>
+      <td>{% if m.is_low %}<span class="badge">低库存</span>{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="note">没有匹配的原料。</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

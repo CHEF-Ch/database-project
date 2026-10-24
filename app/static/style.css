@@ -129,3 +129,31 @@ code {
   padding: .05rem .3rem;
   font-size: .9em;
 }
+
+/* 商品/库存页补充：select 与内联筛选表单、宽表 */
+.form select {
+  padding: .45rem .6rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+  background: #fff;
+}
+.form.inline {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: .5rem;
+  max-width: 100%;
+}
+.table.wide { max-width: 100%; }
+
+/* 库存页补充：勾选项横排、低库存徽标 */
+.form label.check { display: flex; align-items: center; gap: .3rem; }
+.badge {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  border-radius: 999px;
+  padding: .05rem .5rem;
+  font-size: .8rem;
+}

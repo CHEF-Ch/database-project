@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}商品 · MilkTeaShop{% endblock %}
+
+{% block content %}
+<h1>商品</h1>
+
+<form method="get" class="form inline">
+  <label>名称
+    <input name="q" value="{{ q }}" placeholder="搜索商品名">
+  </label>
+  <label>状态
+    <select name="sale_status">
+      <option value="">全部</option>
+      <option value="ON_SALE" {% if sale_status == 'ON_SALE' %}selected{% endif %}>在售</option>
+      <option value="OFF_SHELF" {% if sale_status == 'OFF_SHELF' %}selected{% endif %}>已下架</option>
+    </select>
+  </label>
+  <button class="btn" type="submit">筛选</button>
+</form>
+
+{% if 'product.write' in perms %}
+  <p><a class="btn primary" href="{{ url_for('product.new_product') }}">新增商品</a></p>
+{% endif %}
+
+<table class="table">
+  <thead>
+    <tr><th>编号</th><th>名称</th><th>杯型</th><th>售价</th><th>状态</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for p in products %}
+    <tr>
+      <td><code>{{ p.product_id }}</code></td>
+      <td>{{ p.name }}</td>
+      <td>{{ p.size }}</td>
+      <td>{{ p.unit_price }}</td>
+      <td>{{ p.sale_status }}</td>
+      <td><a class="btn" href="{{ url_for('product.detail', product_id=p.product_id) }}">详情</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="note">没有匹配的商品。</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

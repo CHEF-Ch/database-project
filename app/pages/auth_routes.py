@@ -44,6 +44,7 @@ def login():
     session["role"] = user["role"]
     session["display"] = user["display"]
     session["member_id"] = user.get("member_id")
+    session["employee_id"] = user.get("employee_id")
     return redirect(url_for("main.index"))
 
 
