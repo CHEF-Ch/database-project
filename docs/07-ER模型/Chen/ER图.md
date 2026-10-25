@@ -1,6 +1,6 @@
 # Chen 简化 ER 图
 
-> 订单与订单明细放在中心；商品/原料位于左侧，会员与优惠券位于右侧，库存在下方。实体框列出数据字典中的全部 110 个属性，主码加下划线。图内颜色图例说明业务域；白色菱形表示联系。Mermaid 使用 Dagre 和平滑曲线布局，减少正交折线重合。
+> 订单与订单明细放在中心；商品/原料位于左侧，会员与优惠券位于右侧，库存在下方。实体框列出数据字典中的全部 **111 个属性（v1.0，含 `order_item_addon.addon_price`）**，主码加下划线。图内颜色图例说明业务域；白色菱形表示联系。Mermaid 使用 Dagre 和平滑曲线布局，减少正交折线重合。导出图见同目录 [`er-图.png`](er-图.png)（2026-10-25 由 `@mermaid-js/mermaid-cli` 生成）。
 
 ```mermaid
 %%{init: {"theme": "base", "themeVariables": {"fontFamily": "Arial, Microsoft YaHei, sans-serif", "fontSize": "10px", "lineColor": "#475569", "textColor": "#172033"}, "flowchart": {"defaultRenderer": "dagre", "curve": "basis", "nodeSpacing": 4, "rankSpacing": 8, "padding": 1}}}%%
@@ -22,7 +22,7 @@ flowchart LR
       E["<table border='1' cellpadding='1' cellspacing='0'><tr><td>员工 · staff_employee</td></tr><tr><td><u>employee_id</u></td></tr><tr><td>name</td></tr><tr><td>job_title</td></tr><tr><td>employ_status</td></tr></table>"]
       O["<table border='1' cellpadding='1' cellspacing='0'><tr><td>订单 · shop_order</td></tr><tr><td><u>order_id</u></td></tr><tr><td>channel</td></tr><tr><td>order_mode</td></tr><tr><td>order_status</td></tr><tr><td>member_id</td></tr><tr><td>employee_id</td></tr><tr><td>item_subtotal</td></tr><tr><td>coupon_discount</td></tr><tr><td>total_amount</td></tr><tr><td>pay_method</td></tr><tr><td>pay_txn_no</td></tr><tr><td>created_at</td></tr><tr><td>paid_at</td></tr><tr><td>completed_at</td></tr><tr><td>refund_amount</td></tr><tr><td>refund_at</td></tr></table>"]
       I[["<table border='1' cellpadding='1' cellspacing='0'><tr><td>订单明细 · order_item</td></tr><tr><td>order_id（继承）</td></tr><tr><td>item_line（局部辨识）</td></tr><tr><td>product_id</td></tr><tr><td>size</td></tr><tr><td>sugar_level</td></tr><tr><td>ice_level</td></tr><tr><td>temp_level</td></tr><tr><td>qty</td></tr><tr><td>unit_price</td></tr></table>"]]
-      IA["<table border='1' cellpadding='1' cellspacing='0'><tr><td>加料明细 · order_item_addon</td></tr><tr><td><u>order_id + item_line + material_id</u></td></tr><tr><td>qty</td></tr></table>"]
+      IA["<table border='1' cellpadding='1' cellspacing='0'><tr><td>加料明细 · order_item_addon</td></tr><tr><td><u>order_id + item_line + material_id</u></td></tr><tr><td>qty</td></tr><tr><td>addon_price（下单快照）</td></tr></table>"]
       OP[["<table border='1' cellpadding='1' cellspacing='0'><tr><td>平台订单信息 · order_platform</td></tr><tr><td>order_id（继承）</td></tr><tr><td>platform_order_no</td></tr><tr><td>platform_name</td></tr><tr><td>delivery_address</td></tr><tr><td>delivery_fee</td></tr><tr><td>commission_rate</td></tr><tr><td>commission_amount</td></tr></table>"]]
       R3{"经办 R3"}
       R4{"下单 R4"}
@@ -111,7 +111,7 @@ flowchart LR
     R19a ---|1..1| MC
     CR ---|0..N| R19b
     R19b ---|1..1| MC
-    O ---|0..N| R20
+    O ---|0..1| R20
     R20 ---|0..1| MC
 
     left_domain ~~~ center_domain

@@ -1,0 +1,56 @@
+================================================================================
+第七至九周 ④ 订单业务层自检（2026-10-25）
+================================================================================
+对象：app/services/order_service.py（25 个用例，外层事务回滚）
+命令：python scripts/order_service_test.py
+说明：每个服务调用 = 一个 SAVEPOINT；异常回滚到调用前；全部用例结束整体 ROLLBACK。
+
+python.exe : test_addon_must_be_addon_kind (__main__.OrderServiceTest.test_addon_must_be_addon_kind) ... ok
+所在位置 行:1 字符: 136
++ ... w($false); $out = & python scripts/order_service_test.py 2>&1 | Out-S ...
++                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (test_addon_must...on_kind) ... ok:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+test_balance_insufficient (__main__.OrderServiceTest.test_balance_insufficient) ... ok
+test_balance_payment_no_points (__main__.OrderServiceTest.test_balance_payment_no_points) ... ok
+test_cancel_pending_releases_stock_and_returns_coupon (__main__.OrderServiceTest.test_cancel_pending_releases_stock_and
+_returns_coupon) ... ok
+test_cash_member_coupon_used_and_points_earned (__main__.OrderServiceTest.test_cash_member_coupon_used_and_points_earne
+d) ... ok
+test_cash_order_is_paid_and_deducts_stock (__main__.OrderServiceTest.test_cash_order_is_paid_and_deducts_stock) ... ok
+test_coupon_not_owned (__main__.OrderServiceTest.test_coupon_not_owned) ... ok
+test_coupon_threshold_not_met (__main__.OrderServiceTest.test_coupon_threshold_not_met) ... ok
+test_customer_cannot_pay_other_member_order (__main__.OrderServiceTest.test_customer_cannot_pay_other_member_order) ...
+ ok
+test_customer_cannot_platform (__main__.OrderServiceTest.test_customer_cannot_platform) ... ok
+test_customer_detail_row_isolation (__main__.OrderServiceTest.test_customer_detail_row_isolation) ... ok
+test_insufficient_stock_leaves_no_reservation (__main__.OrderServiceTest.test_insufficient_stock_leaves_no_reservation)
+ ... ok
+test_invalid_qty (__main__.OrderServiceTest.test_invalid_qty) ... ok
+test_lists_and_detail_scopes (__main__.OrderServiceTest.test_lists_and_detail_scopes) ... ok
+test_multi_line_order_ids_and_amounts (__main__.OrderServiceTest.test_multi_line_order_ids_and_amounts) ... ok
+test_pay_is_idempotent_with_same_txn (__main__.OrderServiceTest.test_pay_is_idempotent_with_same_txn) ... ok
+test_pay_txn_conflict_with_other_order (__main__.OrderServiceTest.test_pay_txn_conflict_with_other_order) ... ok
+test_platform_order_paid_without_reservation (__main__.OrderServiceTest.test_platform_order_paid_without_reservation) .
+.. ok
+test_platform_zero_commission_rate (__main__.OrderServiceTest.test_platform_zero_commission_rate) ... ok
+test_refund_balance_returns_balance (__main__.OrderServiceTest.test_refund_balance_returns_balance) ... ok
+test_refund_online_reverses_points (__main__.OrderServiceTest.test_refund_online_reverses_points) ... ok
+test_refund_returns_coupon_and_reverses_points (__main__.OrderServiceTest.test_refund_returns_coupon_and_reverses_point
+s) ... ok
+test_self_order_pending_reserves_then_pay (__main__.OrderServiceTest.test_self_order_pending_reserves_then_pay) ... ok
+test_update_status_invalid_pending_to_completed (__main__.OrderServiceTest.test_update_status_invalid_pending_to_comple
+ted) ... ok
+test_update_status_paid_making_completed (__main__.OrderServiceTest.test_update_status_paid_making_completed) ... ok
+
+----------------------------------------------------------------------
+Ran 25 tests in 0.856s
+
+OK
+
+运行后数据库基线（应仍为 seed：7 单 / 12 明细 / 36 流水 / M1 4500 / C1 118 分 / 77 元）：
+Changed database context to 'MilkTeaShop_v01'.
+orders items logs m1_stock c1_points c1_balance
+------ ----- ---- -------- --------- ----------
+7 12 36 4500.00 118 77.00

@@ -1,4 +1,6 @@
-# 第七至九周 Web 应用依赖（Python 3.13 实测通过）
-# 安装：python -m pip install -r requirements.txt
+# Web app dependencies (weeks 7-9); tested on Python 3.13 / 3.12.
+# Install: python -m pip install -r requirements.txt
+# Keep this file ASCII-only: pip on Chinese Windows decodes it with GBK and
+# a UTF-8 Chinese comment makes the install fail before any package is read.
 Flask>=3.0,<4.0
 pyodbc>=5.0,<6.0

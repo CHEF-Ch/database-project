@@ -342,3 +342,33 @@ def add_member_balance(
         raise AppError(ErrCode.INTERNAL, detail="会员余额更新后读取失败")
     return member
 
+
+def get_coupon_for_order(cur, order_id: str) -> dict[str, Any] | None:
+    """取某订单核销/锁定的会员券；没有则返回 None。
+
+    用于取消/退款时把券退回（LOCKED/USED → RETURNED）。``used_order_id`` 上有
+    筛选唯一索引，每单最多一张券，故最多命中一行。
+    """
+    sql = _COUPON_SELECT.format(lock="") + " WHERE mc.used_order_id = ?"
+    cur.execute(sql, order_id)
+    return fetch_one(cur)
+
+
+def sum_points_for_order(cur, order_id: str) -> int:
+    """该订单已记的积分净额（EARN_SALE 为正、REVERSAL 为负）。
+
+    退款冲正时用它决定需要反向多少分；未支付/未计分的订单返回 0。
+    """
+    cur.execute(
+        """
+        SELECT ISNULL(SUM(CASE point_type
+                              WHEN 'EARN_SALE' THEN points
+                              WHEN 'REVERSAL'  THEN -points
+                              ELSE 0
+                          END), 0)
+        FROM dbo.member_point_log
+        WHERE order_id = ?
+        """,
+        order_id,
+    )
+    return int(fetch_scalar(cur, 0))

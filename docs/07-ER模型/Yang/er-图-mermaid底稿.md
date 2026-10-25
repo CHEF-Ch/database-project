@@ -1,6 +1,6 @@
-# Yang 的 ER 图底稿（Mermaid，可编辑 / 可导出）
+# Yang 的 ER 图（Mermaid crow's foot，可编辑 / 已导出 PNG）
 
-> 这是 **Yang 画 freedgo ER 图前的统一底稿**：实体 = 17 张表、联系 = 25 条外码、基数 = 参与约束（min..max），与 `业务规则与映射清单.md` §2 逐条一致。在 freedgo 里照此落一遍即可，最终导出 `er-图.png`。
+> 这是 **Yang 的 ER 图源文件**：实体 = 17 张表、联系 = 25 条外码、基数 = 参与约束（min..max），与 `业务规则与映射清单.md` §2 逐条一致。导出图见同目录 [`er-图.png`](er-图.png)（2026-10-25 由 `@mermaid-js/mermaid-cli` 生成；已补 `order_item_addon.addon_price` 与 R20 的 0..1 修正）。
 >
 > - **命名对应数据字典**：实体名用英文表名（与 `docs/02` §2.2 完全一致），中文业务名见 §3 对照表。
 > - **渲染方式**：本代码块可在 VS Code（装 Mermaid 插件）、GitHub、[Mermaid Live](https://mermaid.live) 里直接渲染；命令行导出 PNG 用 `npx @mermaid-js/mermaid-cli`。
@@ -81,6 +81,7 @@ erDiagram
         smallint item_line PK, FK
         char material_id PK, FK
         int qty "加料份数>0"
+        decimal addon_price "加料单价快照>0"
     }
     order_platform {
         char order_id PK, FK "弱实体1:0..1"
@@ -198,7 +199,7 @@ erDiagram
     %% 券域：M:N 持券 + 核销
     member_member ||--o{ mkt_member_coupon : "持有(0..N)"
     mkt_coupon_rule ||--o{ mkt_member_coupon : "发放(0..N)"
-    shop_order |o--o{ mkt_member_coupon : "核销(0..N,可空)"
+    shop_order |o--o| mkt_member_coupon : "核销(0..1,可空;每单最多一张)"
 ```
 
 ## 3. 实体中文名对照（英文表名 ↔ 业务名 ↔ 分类）

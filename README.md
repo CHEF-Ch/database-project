@@ -48,6 +48,7 @@
 │   ├── enable-mixed-auth.ps1  # 一次性开启 SQL Server 混合认证（使用受限登录时）
 │   ├── dao_test.py            # ③ DAO 自检：37 项读写/回滚/幂等/约束分类（事务内回滚）
 │   ├── dao_roles_test.py      # ③ DAO 角色自检：DB_AUTH=sql 下 7 组角色路径（含 role_app）
+│   ├── order_service_test.py  # ④ 订单业务层自检：25 项下单/支付/取消/退款/状态（事务回滚）
 │   ├── smoke_test.py          # ⑦的雏形：骨架用例 + 错误分类 + 真实启动，可写证据
 │   └── verify_db_logins.py    # ⑦的雏形：5 个业务登录（不含 login_app）的数据库级权限正/反例
 ├── sql/
