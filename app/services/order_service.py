@@ -13,8 +13,15 @@
   + 券锁定/核销/退回 + 会员积分/余额快照与流水 + 平台订单信息。
 
 已知限制（docs/09 §10）：
-  · 配方/加料每份用量没有下单时快照；若下单后改配方，支付/取消时按**当前**配方
-    重算耗用量，可能与创建时的预占不一致。v2.0 考虑在明细上快照耗用量。
+  · 配方/加料每份用量**没有下单时快照**；若下单后改配方，支付/取消会按**当前**配方
+    重算耗用量。三种后果（2026-10-28 交叉复核 P1-2 实测）：
+      ① 预占不够 → 订单**卡在 PENDING**，既付不了也取消不了（现报 E4001 并提示找管理员，
+         不再误报 E5003“请重试”）；
+      ② 配方变小 → 少扣/少释放，残留孤儿预占（可售虚低）；
+      ③ 配方变大但该原料有其它单预占兜底 → **静默多扣**，SALE 流水也跟着多记。
+    v1.0 不提供配方维护入口（商品页只改名称/杯型/价/状态），所以仅直接改库时触发；
+    v2.0 要在 ``order_item``（或新表 ``order_item_usage``）快照耗用量，且配方维护页必须
+    **禁止在有 PENDING 订单时改配方**。
   · 订单号用 ``MAX+1`` + ``UPDLOCK/HOLDLOCK``，撞主码时重试；不使用 SEQUENCE。
 """
 from __future__ import annotations
@@ -203,10 +210,16 @@ def _normalise_context(
 
     顾客：只能到店自助（COUNTER_SELF），会员号必须来自 session，支付方式忽略，
           支付确认走 ``pay_order``；不能伪造平台单/经办人/退款额。
-    店员：到店单（收银台/自助）；现金单直接 PAID，其余 PENDING。
-    店长：到店单 + 平台单（平台单无会员、无 PENDING、无现金支付方式）。
+    店员：到店单（收银台/自助）+ **平台单**（外卖平台接单由收银录入）；
+          现金单直接 PAID，其余 PENDING。
+
+    **店长不能下单（2026-10-28 ④ 复核 P2-3 收口）**：``docs/01`` 的角色职责表里“收银台代录”
+    是收银员的活，店长职责是“维护商品/配方/加料/券规则 + 审核退款”。因此本函数与
+    ``services.permissions.PERMISSIONS``（``manager`` 没有 ``order.create``）及页面层
+    ``@role_required("order.create")`` 三层保持一致，店长一律 403。
+    若将来要让店长代班收银，要**同时**改三处（矩阵 + 本节白名单 + ``docs/01`` 职责表）。
     """
-    if role not in {"clerk", "customer", "manager"}:
+    if role not in {"clerk", "customer"}:
         raise AppError(ErrCode.FORBIDDEN)
 
     raw_channel = (channel or "COUNTER").strip().upper()
@@ -835,7 +848,13 @@ def list_orders(
     member_id: str | None = None,
     role: str | None = None,
 ) -> list[dict]:
-    """订单列表；顾客强制只看自己的单（member_id 来自 session）。"""
+    """订单列表；顾客分支只按传入的 ``member_id`` 过滤。
+
+    ⚠ **调用约定（④ 复核 P2-2）**：``member_id`` 只允许由页面层从 session 取出后传入，
+    **绝对不得透传请求参数**（如 ``request.args.get("member_id")``）——本函数不校验它与
+    会话是否一致，透传即等于把顾客分支变成全表读取。当前唯一入口 ``/orders/`` 需要
+    ``order.read``，顾客进不来；顾客走 ``/orders/mine``（member_id 来自 session）。
+    """
     role = _read_role(role)
     with db_cursor(role) as cur:
         if role == "customer":
@@ -864,7 +883,10 @@ def list_my_orders(
     offset: int | None = 0,
     role: str | None = None,
 ) -> list[dict]:
-    """“我的订单”：只按 session 会员过滤；未绑定会员（如店员）返回空列表。"""
+    """“我的订单”：只按 session 会员过滤；未绑定会员（如店员）返回空列表。
+
+    ⚠ ``member_id`` 必须来自 session（页面层 ``/orders/mine`` 就是这么传的），不得透传请求参数。
+    """
     role = _read_role(role)
     if not member_id:
         return []
@@ -881,7 +903,11 @@ def get_order_detail(
     include_stock_logs: bool = False,
     role: str | None = None,
 ) -> dict:
-    """订单详情；顾客按会员做行级隔离，不存在/不属于自己统一 404。"""
+    """订单详情；顾客按会员做行级隔离，不存在/不属于自己统一 404。
+
+    ⚠ 同 ``list_orders``：``member_id`` 必须来自 session，不得透传客户端传入的会员号；
+    校验本身由 ``dao.order.get_order_detail_for_member`` 把 ``member_id`` 当成 WHERE 条件完成。
+    """
     role = _read_role(role)
     order_id = _order_id(order_id)
     with db_cursor(role) as cur:

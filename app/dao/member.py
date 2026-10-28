@@ -149,16 +149,25 @@ def use_coupon(cur, member_coupon_id: int, member_id: str, order_id: str) -> int
 
 
 def return_coupon(cur, member_coupon_id: int, member_id: str, order_id: str) -> int:
-    """取消/整单退款退回券：LOCKED/USED → RETURNED。"""
+    """取消/整单退款退回券：``LOCKED``/``USED`` → **``UNUSED``**（清空 ``used_order_id``）。
+
+    口径来自 ``docs/01 §4.4``："整单退款时券**退回为未使用**，而非作废"。
+    此前的实现退到 ``RETURNED``，而可用性判定（``_apply_coupon``/``lock_coupon``/
+    ``list_usable_coupons``）只认 ``UNUSED``，等于把券退成了废券（2026-10-28 交叉复核 P1-1）。
+
+    约束相容：``CK_mkt_member_coupon_used`` 要求 ``UNUSED`` 时 ``used_order_id IS NULL``，
+    因此必须同时清空该列；清空后也不参与 ``used_order_id`` 的筛选唯一索引。
+    代价：券与退款单的关联随之清空（退款单上的 ``coupon_discount`` 快照仍在），
+    需要逐单审计券使用史时应由 v2.0 的券使用流水表承担。
+    """
     cur.execute(
         """
         UPDATE dbo.mkt_member_coupon
-        SET coupon_status = 'RETURNED', used_order_id = ?
+        SET coupon_status = 'UNUSED', used_order_id = NULL
         WHERE member_coupon_id = ? AND member_id = ?
           AND coupon_status IN ('LOCKED', 'USED')
           AND used_order_id = ?
         """,
-        order_id,
         member_coupon_id,
         member_id,
         order_id,
@@ -346,8 +355,9 @@ def add_member_balance(
 def get_coupon_for_order(cur, order_id: str) -> dict[str, Any] | None:
     """取某订单核销/锁定的会员券；没有则返回 None。
 
-    用于取消/退款时把券退回（LOCKED/USED → RETURNED）。``used_order_id`` 上有
-    筛选唯一索引，每单最多一张券，故最多命中一行。
+    用于取消/退款时把券退回（``LOCKED``/``USED`` → ``UNUSED``，见 ``return_coupon``）。
+    ``used_order_id`` 上有筛选唯一索引，每单最多一张券，故最多命中一行。
+    注意：券一旦退回，``used_order_id`` 会被清空，本函数便不再命中它。
     """
     sql = _COUPON_SELECT.format(lock="") + " WHERE mc.used_order_id = ?"
     cur.execute(sql, order_id)

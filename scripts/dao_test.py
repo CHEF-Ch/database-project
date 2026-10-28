@@ -387,9 +387,12 @@ class DaoWriteTests(unittest.TestCase):
             self.assertEqual(
                 member.return_coupon(cur, coupon_id, "C0000002", order_id), 1
             )
-            self.assertEqual(
-                member.get_member_coupon(cur, coupon_id)["coupon_status"], "RETURNED"
-            )
+            # docs/01 §4.4：退回为“未使用”而非作废；used_order_id 必须同时清空（CK 要求）
+            returned = member.get_member_coupon(cur, coupon_id)
+            self.assertEqual(returned["coupon_status"], "UNUSED")
+            self.assertIsNone(returned["used_order_id"])
+            # 退回后可再次锁定（同一张券的复用路径）
+            self.assertEqual(member.lock_coupon(cur, coupon_id, "C0000002", order_id), 1)
 
     def test_member_points_and_balance(self) -> None:
         with db_cursor("manager") as cur:

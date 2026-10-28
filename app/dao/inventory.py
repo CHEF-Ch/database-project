@@ -317,11 +317,18 @@ def release_order_stock(
 
     调用方必须先用订单状态条件更新（``cancel_order``）做幂等闸门，
     只有状态确实从 PENDING 变为 CANCELLED 时才调用本函数。
+
+    错误分类（2026-10-28 ④ 交叉复核 P1-2）：预占不够**不是**事务失败，而是
+    “下单时按旧配方预占、取消时按新配方重算”造成的业务状态不可行，因此报
+    ``E4001``（而非原先误用的 ``E5003``），并明确告诉用户下一步怎么做。
+    根因是 v1.0 没有存“下单时的耗用快照”（需加表，留 v2.0）。
     """
     for material_id in sorted(usages):
         if release_reserved(cur, material_id, usages[material_id]) != 1:
             raise AppError(
-                ErrCode.TX_FAILED,
+                ErrCode.BUSINESS_RULE,
+                "该订单的原料预占与当前配方不一致（配方在下单后被修改过），无法释放；"
+                "请联系管理员按退款处理。",
                 detail=f"原料 {material_id} 预占量不足以释放",
                 extra={"material_id": material_id},
             )
@@ -356,6 +363,8 @@ def confirm_order_stock(
         if confirm_reserved(cur, material_id, usages[material_id]) != 1:
             raise AppError(
                 ErrCode.BUSINESS_RULE,
+                "原料预占不足，无法确认付款（配方可能在下单后被修改过）；"
+                "请联系管理员按退款或手工处理。",
                 detail=f"原料 {material_id} 预占不足，无法确认耗用",
                 extra={"material_id": material_id},
             )

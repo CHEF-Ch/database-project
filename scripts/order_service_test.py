@@ -104,6 +104,12 @@ class OrderServiceTest(unittest.TestCase):
         self.assertIsNotNone(row, f"{member_id} 没有 {status} 状态的券")
         return int(row[0])
 
+    def used_order_id(self, coupon_id: int) -> str | None:
+        return self.scalar(
+            "SELECT used_order_id FROM dbo.mkt_member_coupon WHERE member_coupon_id = ?",
+            coupon_id,
+        )
+
     def sale_qty(self, order_id: str, material_id: str) -> Decimal:
         self.cur.execute(
             "SELECT ISNULL(SUM(qty), 0) FROM dbo.inv_stock_log "
@@ -236,8 +242,83 @@ class OrderServiceTest(unittest.TestCase):
         )
         self.assertEqual(cancelled["order"]["order_status"], "CANCELLED")
         self.assertEqual(self.reserved("M0000001"), before_reserved)
-        self.assertEqual(self.coupon_status(coupon_id), "RETURNED")
+        # docs/01 §4.4：退回为“未使用”，不是作废（2026-10-28 交叉复核 P1-1）
+        self.assertEqual(self.coupon_status(coupon_id), "UNUSED")
+        self.assertIsNone(self.used_order_id(coupon_id))
         self.assertEqual(self.sale_qty(order["order_id"], "M0000001"), _d("0"))
+
+    def test_returned_coupon_can_be_used_again(self):
+        """P1-1 回归：取消后退回的券必须回到 UNUSED，且能再用在同一会员的新订单上。"""
+        coupon_id = self.coupon_id("C0000002")
+        first = svc.create_order(
+            items=[self.base_item("P0000001", 3)],
+            role="customer",
+            member_id="C0000002",
+            member_coupon_id=coupon_id,
+            today=FIXED_DAY,
+        )["order"]
+        svc.cancel_order(first["order_id"], role="customer", member_id="C0000002")
+        self.assertEqual(self.coupon_status(coupon_id), "UNUSED")
+        self.assertIsNone(self.used_order_id(coupon_id))
+        # 退回后重新出现在“可用券”列表里（页面下拉也用这个函数）
+        usable = [c["member_coupon_id"] for c in svc.list_usable_coupons(
+            "C0000002", "36.00", today=FIXED_DAY, role="customer")]
+        self.assertIn(coupon_id, usable)
+
+        second = svc.create_order(
+            items=[self.base_item("P0000001", 3)],
+            role="customer",
+            member_id="C0000002",
+            member_coupon_id=coupon_id,
+            today=FIXED_DAY,
+        )["order"]
+        self.assertEqual(_d(second["coupon_discount"]), _d("5.00"))
+        self.assertEqual(self.coupon_status(coupon_id), "LOCKED")
+        self.assertEqual(self.used_order_id(coupon_id), second["order_id"])
+
+    # ---- 配方在下单后被修改（已知限制的回归用例） ---------------------
+    def test_cancel_after_recipe_changed_reports_business_rule(self):
+        """P1-2 回归：改配方导致预占不够时，取消应报 E4001（业务规则）+ 可行动提示，
+        而不是 E5003（“事务失败，请重试”——重试永远失败）；订单仍为 PENDING。"""
+        order = svc.create_order(
+            items=[self.base_item("P0000005", 1)],
+            role="customer",
+            member_id="C0000001",
+        )["order"]
+        self.cur.execute(
+            "UPDATE dbo.item_recipe SET qty = 60 WHERE product_id = 'P0000005' "
+            "AND material_id = 'M0000005'"
+        )
+        with self.assertRaises(AppError) as ctx:
+            svc.cancel_order(order["order_id"], role="clerk")
+        self.assertEqual(ctx.exception.code, "E4001")
+        self.assertIn("配方", ctx.exception.message or "")
+        self.assertEqual(self.order_status(order["order_id"]), "PENDING")
+        self.assertEqual(self.reserved("M0000005"), _d("30.00"))
+
+    def test_pay_after_recipe_changed_reports_business_rule(self):
+        """P1-2 回归：改配方后支付不够预占，同样报 E4001 且提示配方可能已变更。"""
+        order = svc.create_order(
+            items=[self.base_item("P0000005", 1)],
+            role="customer",
+            member_id="C0000001",
+        )["order"]
+        self.cur.execute(
+            "UPDATE dbo.item_recipe SET qty = 60 WHERE product_id = 'P0000005' "
+            "AND material_id = 'M0000005'"
+        )
+        with self.assertRaises(AppError) as ctx:
+            svc.pay_order(
+                order["order_id"],
+                pay_method="ONLINE",
+                pay_txn_no="TEST-RECIPE-0001",
+                role="customer",
+                member_id="C0000001",
+            )
+        self.assertEqual(ctx.exception.code, "E4001")
+        self.assertIn("配方", ctx.exception.message or "")
+        self.assertEqual(self.order_status(order["order_id"]), "PENDING")
+        self.assertEqual(self.sale_qty(order["order_id"], "M0000005"), _d("0"))
 
     # ---- 退款：线上单冲正积分 -----------------------------------------
     def test_refund_online_reverses_points(self):
@@ -290,7 +371,9 @@ class OrderServiceTest(unittest.TestCase):
 
         refunded = svc.refund_order(order_id, role="manager")
         self.assertEqual(refunded["order"]["order_status"], "REFUNDED")
-        self.assertEqual(self.coupon_status(coupon_id), "RETURNED")
+        # 退款退券回“未使用”（docs/01 §4.4），且解除与退款单的关联
+        self.assertEqual(self.coupon_status(coupon_id), "UNUSED")
+        self.assertIsNone(self.used_order_id(coupon_id))
         self.assertEqual(self.points("C0000002"), before_points)
 
     # ---- 退款：余额单退回余额 -----------------------------------------
@@ -473,6 +556,35 @@ class OrderServiceTest(unittest.TestCase):
             member_id="C0000001",
             member_coupon_id=coupon_id,
             today=FIXED_DAY,
+        )
+
+    # ---- 权限边界：店长不能下单（矩阵 / 服务层 / 页面三层一致） ---------
+    def test_manager_cannot_create_order(self):
+        """P2-3 回归：``docs/01`` 把“收银台代录”归给收银员，店长职责是维护与退款，
+        因此 ``create_order(role="manager")`` 必须 403，而不是静默成功。"""
+        self.assert_app_error(
+            "E2003",
+            svc.create_order,
+            items=[self.base_item("P0000003", 1)],
+            role="manager",
+            employee_id="E0000004",
+            pay_method="CASH",
+        )
+        # 平台单同样要过这道闸（平台单入口是收银员，不是店长）
+        self.assert_app_error(
+            "E2003",
+            svc.create_order,
+            items=[self.base_item("P0000002", 1)],
+            role="manager",
+            employee_id="E0000004",
+            channel="PLATFORM",
+            platform={
+                "platform_order_no": "MT-MGR-0001",
+                "platform_name": "MEITUAN",
+                "delivery_address": "不应落库",
+                "delivery_fee": 0,
+                "commission_rate": "0.2",
+            },
         )
 
     def test_customer_cannot_platform(self):

@@ -1,0 +1,49 @@
+================================================================================
+第七至九周 ④ 订单业务层自检（2026-10-28）
+================================================================================
+命令：python scripts/order_service_test.py
+说明：④ 订单业务层自检（29 项），每个服务调用 = 一个 SAVEPOINT，异常回滚到调用前，全部用例结束整体 ROLLBACK；seed 行数/库存/积分/余额不变。
+本版为 2026-10-28 交叉复核（result/第7周-④业务层复核-20261028.md）修复后重跑：
+  · P1-1 退券回到 UNUSED（新增 test_returned_coupon_can_be_used_again）
+  · P1-2 改配方后取消/支付报 E4001 + 可行动文案（新增两条回归）
+  · P2-3 _normalise_context 白名单收紧为 {clerk, customer}（新增 test_manager_cannot_create_order）
+
+================================================================================
+test_addon_must_be_addon_kind (__main__.OrderServiceTest.test_addon_must_be_addon_kind) ... ok
+test_balance_insufficient (__main__.OrderServiceTest.test_balance_insufficient) ... ok
+test_balance_payment_no_points (__main__.OrderServiceTest.test_balance_payment_no_points) ... ok
+test_cancel_after_recipe_changed_reports_business_rule (__main__.OrderServiceTest.test_cancel_after_recipe_changed_reports_business_rule)
+P1-2 回归：改配方导致预占不够时，取消应报 E4001（业务规则）+ 可行动提示， ... ok
+test_cancel_pending_releases_stock_and_returns_coupon (__main__.OrderServiceTest.test_cancel_pending_releases_stock_and_returns_coupon) ... ok
+test_cash_member_coupon_used_and_points_earned (__main__.OrderServiceTest.test_cash_member_coupon_used_and_points_earned) ... ok
+test_cash_order_is_paid_and_deducts_stock (__main__.OrderServiceTest.test_cash_order_is_paid_and_deducts_stock) ... ok
+test_coupon_not_owned (__main__.OrderServiceTest.test_coupon_not_owned) ... ok
+test_coupon_threshold_not_met (__main__.OrderServiceTest.test_coupon_threshold_not_met) ... ok
+test_customer_cannot_pay_other_member_order (__main__.OrderServiceTest.test_customer_cannot_pay_other_member_order) ... ok
+test_customer_cannot_platform (__main__.OrderServiceTest.test_customer_cannot_platform) ... ok
+test_customer_detail_row_isolation (__main__.OrderServiceTest.test_customer_detail_row_isolation) ... ok
+test_insufficient_stock_leaves_no_reservation (__main__.OrderServiceTest.test_insufficient_stock_leaves_no_reservation) ... ok
+test_invalid_qty (__main__.OrderServiceTest.test_invalid_qty) ... ok
+test_lists_and_detail_scopes (__main__.OrderServiceTest.test_lists_and_detail_scopes) ... ok
+test_manager_cannot_create_order (__main__.OrderServiceTest.test_manager_cannot_create_order)
+P2-3 回归：``docs/01`` 把“收银台代录”归给收银员，店长职责是维护与退款， ... ok
+test_multi_line_order_ids_and_amounts (__main__.OrderServiceTest.test_multi_line_order_ids_and_amounts) ... ok
+test_pay_after_recipe_changed_reports_business_rule (__main__.OrderServiceTest.test_pay_after_recipe_changed_reports_business_rule)
+P1-2 回归：改配方后支付不够预占，同样报 E4001 且提示配方可能已变更。 ... ok
+test_pay_is_idempotent_with_same_txn (__main__.OrderServiceTest.test_pay_is_idempotent_with_same_txn) ... ok
+test_pay_txn_conflict_with_other_order (__main__.OrderServiceTest.test_pay_txn_conflict_with_other_order) ... ok
+test_platform_order_paid_without_reservation (__main__.OrderServiceTest.test_platform_order_paid_without_reservation) ... ok
+test_platform_zero_commission_rate (__main__.OrderServiceTest.test_platform_zero_commission_rate) ... ok
+test_refund_balance_returns_balance (__main__.OrderServiceTest.test_refund_balance_returns_balance) ... ok
+test_refund_online_reverses_points (__main__.OrderServiceTest.test_refund_online_reverses_points) ... ok
+test_refund_returns_coupon_and_reverses_points (__main__.OrderServiceTest.test_refund_returns_coupon_and_reverses_points) ... ok
+test_returned_coupon_can_be_used_again (__main__.OrderServiceTest.test_returned_coupon_can_be_used_again)
+P1-1 回归：取消后退回的券必须回到 UNUSED，且能再用在同一会员的新订单上。 ... ok
+test_self_order_pending_reserves_then_pay (__main__.OrderServiceTest.test_self_order_pending_reserves_then_pay) ... ok
+test_update_status_invalid_pending_to_completed (__main__.OrderServiceTest.test_update_status_invalid_pending_to_completed) ... ok
+test_update_status_paid_making_completed (__main__.OrderServiceTest.test_update_status_paid_making_completed) ... ok
+
+----------------------------------------------------------------------
+Ran 29 tests in 1.030s
+
+OK
