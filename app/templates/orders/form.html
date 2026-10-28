@@ -1,0 +1,288 @@
+{% extends "base.html" %}
+{% block title %}新建订单 · MilkTeaShop{% endblock %}
+
+{% block content %}
+<h1>新建订单</h1>
+
+{% if error %}
+<div class="banner error" role="alert">
+  <p><strong>下单未完成：</strong>{{ error.message }}<span class="note">（错误码 <code>{{ error.code }}</code>）</span></p>
+  {% if error.code == 'E4001' %}
+  <p class="note">常见原因：某款原料可售量不足、券未达到门槛、或订单状态已变化；具体原因见请求标识对应的后端日志。</p>
+  {% endif %}
+  <p class="note">
+    已保留你刚才填写的内容，可直接修改后重新提交。
+    若反复失败，请把请求标识 <code>{{ g.request_id }}</code> 提供给管理员。
+  </p>
+</div>
+{% endif %}
+
+{% if not is_customer %}
+{# 券下拉只按会员号列券，所以给店员一个“先查会员”的 GET 入口（与下面的下单表单分开，避免嵌套表单） #}
+<form method="get" action="{{ url_for('order.new_order') }}" class="form inline">
+  <label>按会员号列券
+    <input name="member_id" maxlength="8" value="{{ member_id }}" placeholder="如 C0000002">
+  </label>
+  <button class="btn" type="submit">查询该会员的可用券</button>
+</form>
+<p class="note">查到的会员号会自动带入“下单信息”；门店无此会员时可留空，按非会员单下单。</p>
+{% endif %}
+
+{% if is_customer %}
+  <p class="banner note">
+    顾客自助点单：会员号取自登录账号（不可更改），提交后订单为<strong>待支付</strong>，
+    支付确认在订单详情页完成；不能创建平台单、不能指定经办员工或金额。
+  </p>
+{% else %}
+  <p class="note">
+    收银台下单：现金当场结清（直接已支付），线上/余额先挂单待支付；
+    会员号留空即非会员单。金额一律由服务端按主数据重算。
+  </p>
+{% endif %}
+
+<form method="post" action="{{ url_for('order.create_order') }}" id="order-form">
+  <h2>选择饮品</h2>
+  <table class="table wide order-form">
+    <thead>
+      <tr><th>商品</th><th>单价</th><th>杯数</th><th>糖度</th><th>冰量</th><th>温度</th><th>加料（份数）</th></tr>
+    </thead>
+    <tbody>
+      {% for p in products %}
+      {# 回填：提交失败时从 request.form 取回用户刚才填的值；首次进入（form 为空）用默认值 #}
+      {% set v_qty = (form.get('qty.' ~ p.product_id, '0') if form else '0') or '0' %}
+      {% set v_sugar = (form.get('sugar.' ~ p.product_id, 'FULL') if form else 'FULL') or 'FULL' %}
+      {% set v_ice = (form.get('ice.' ~ p.product_id, 'REGULAR') if form else 'REGULAR') or 'REGULAR' %}
+      {% set v_temp = (form.get('temp.' ~ p.product_id, 'COLD') if form else 'COLD') or 'COLD' %}
+      <tr>
+        <td><code>{{ p.product_id }}</code> {{ p.name }} <span class="note">{{ p.size }}</span></td>
+        <td>{{ p.unit_price }}</td>
+        <td>
+          <input class="qty" type="number" name="qty.{{ p.product_id }}"
+                 min="0" max="99" step="1" value="{{ v_qty }}" data-price="{{ p.unit_price }}"
+                 aria-label="{{ p.name }} {{ p.size }} 杯数">
+        </td>
+        <td>
+          <select name="sugar.{{ p.product_id }}">
+            {% for code, label in sugars.items() %}
+              <option value="{{ code }}" {% if code == v_sugar %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </td>
+        <td>
+          <select name="ice.{{ p.product_id }}">
+            {% for code, label in ices.items() %}
+              <option value="{{ code }}" {% if code == v_ice %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </td>
+        <td>
+          <select name="temp.{{ p.product_id }}">
+            {% for code, label in temps.items() %}
+              <option value="{{ code }}" {% if code == v_temp %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </td>
+        <td>
+          {% for a in p.addons %}
+            {% set v_addon = (form.get('addon.' ~ p.product_id ~ '.' ~ a.material_id, '0') if form else '0') or '0' %}
+            <label class="check">
+              <input class="addon" type="number" name="addon.{{ p.product_id }}.{{ a.material_id }}"
+                     min="0" max="99" step="1" value="{{ v_addon }}" data-price="{{ a.addon_price }}"
+                     aria-label="{{ p.name }} 加{{ a.material_name }}份数">
+              {{ a.material_name }} +¥{{ a.addon_price }}
+            </label>
+          {% else %}
+            <span class="note">无</span>
+          {% endfor %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="note">当前没有在售商品，无法下单。</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="note">杯数填 0 表示不点这一款；加料按“份”单独计价，不随杯数翻倍（与业务层口径一致）。</p>
+
+  <h2>下单信息</h2>
+  <div class="form">
+    {% if is_customer %}
+      <input type="hidden" name="channel" value="COUNTER">
+      <input type="hidden" name="order_mode" value="COUNTER_SELF">
+      <p class="kv">渠道：到店 · 自助点单　｜　会员号：<code>{{ member_id }}</code></p>
+    {% else %}
+      {% set v_channel = (form.get('channel', 'COUNTER') if form else 'COUNTER') or 'COUNTER' %}
+      {% set v_mode = (form.get('order_mode', 'COUNTER_CASHIER') if form else 'COUNTER_CASHIER') or 'COUNTER_CASHIER' %}
+      {% set v_pay = (form.get('pay_method') if form else 'CASH') or '' %}
+      <label>渠道
+        <select name="channel">
+          <option value="COUNTER" {% if v_channel == 'COUNTER' %}selected{% endif %}>到店</option>
+          <option value="PLATFORM" {% if v_channel == 'PLATFORM' %}selected{% endif %}>外卖平台</option>
+        </select>
+      </label>
+      <label>下单方式
+        <select name="order_mode">
+          {% for code, label in modes.items() %}
+            <option value="{{ code }}" {% if code == v_mode %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>会员号（可选，收银台代客下单）
+        <input name="member_id" maxlength="8"
+               value="{{ (form.get('member_id') if form else member_id) or '' }}" placeholder="如 C0000001">
+      </label>
+      <label>支付方式
+        <select name="pay_method">
+          <option value="CASH" {% if v_pay == 'CASH' %}selected{% endif %}>现金（当场结清 → 已支付）</option>
+          <option value="ONLINE" {% if v_pay == 'ONLINE' %}selected{% endif %}>线上（先挂单 → 待支付）</option>
+          <option value="BALANCE" {% if v_pay == 'BALANCE' %}selected{% endif %}>会员余额（先挂单 → 待支付）</option>
+          <option value="" {% if v_pay == '' %}selected{% endif %}>先挂单，暂不指定</option>
+        </select>
+      </label>
+    {% endif %}
+
+    {% if coupons %}
+      {% set v_coupon = (form.get('member_coupon_id') if form else '') or '' %}
+      <label>优惠券
+        <select name="member_coupon_id" id="coupon-select">
+          <option value="" {% if v_coupon == '' %}selected{% endif %}>不使用</option>
+          {% for c in coupons %}
+            <option value="{{ c.member_coupon_id }}"
+                    data-threshold="{{ c.threshold_amount }}"
+                    data-discount="{{ c.discount_amount }}"
+                    {% if v_coupon == c.member_coupon_id|string %}selected{% endif %}>
+              {{ c.coupon_name }}（满 {{ c.threshold_amount }} 减 {{ c.discount_amount }}）· 券号 {{ c.member_coupon_id }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <p class="note">
+        这里列出的是该会员<strong>有效期内未使用</strong>的券；页面会按当前合计自动置灰尚不满门槛的券，
+        但<strong>能不能用一律由服务端按提交时的真实券前金额校验</strong>（不满足会拒绝下单）。
+      </p>
+    {% endif %}
+
+    {% if not is_customer %}
+      <fieldset class="platform-box">
+        <legend>平台单信息（渠道选“外卖平台”时必填）</legend>
+        {% set v_pname = (form.get('platform_name', 'MEITUAN') if form else 'MEITUAN') or 'MEITUAN' %}
+        <label>平台单号
+          <input name="platform_order_no" maxlength="50" placeholder="如 MT20261025001"
+                 value="{{ (form.get('platform_order_no') if form else '') or '' }}">
+        </label>
+        <label>平台
+          <select name="platform_name">
+            {% for code, label in platforms.items() %}
+              <option value="{{ code }}" {% if code == v_pname %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>配送地址
+          <input name="delivery_address" maxlength="200"
+                 value="{{ (form.get('delivery_address') if form else '') or '' }}">
+        </label>
+        <label>配送费
+          <input name="delivery_fee" type="number" min="0" step="0.01"
+                 value="{{ (form.get('delivery_fee') if form else '0') or '0' }}">
+        </label>
+        <label>抽成比例
+          <input name="commission_rate" type="number" min="0" max="1" step="0.0001" placeholder="留空取 0.2000"
+                 value="{{ (form.get('commission_rate') if form else '') or '' }}">
+        </label>
+      </fieldset>
+      <p class="note">平台单不预占库存、不积分、会员号留空；接单即扣料并写 SALE 流水。</p>
+    {% endif %}
+  </div>
+
+  <p>
+    券前预估合计：<strong id="preview" aria-live="polite">0.00</strong> 元
+    <span id="preview-discount" class="note"></span>
+    <span class="note">（仅填写参考；服务端按主数据重算，客户端金额一律不采信）</span>
+  </p>
+  <button class="btn primary" type="submit">提交订单</button>
+</form>
+
+<p>
+  {% if 'order.read' in perms %}<a class="btn" href="{{ url_for('order.list_orders') }}">返回订单列表</a>{% endif %}
+  {% if 'order.read_own' in perms %}<a class="btn" href="{{ url_for('order.my_orders') }}">我的订单</a>{% endif %}
+</p>
+
+{# 合计与券置灰都只是页面提示：不改表单字段、不参与入库金额，服务端始终自己算 #}
+<script>
+(function () {
+  var form = document.getElementById('order-form');
+  var out = document.getElementById('preview');
+  var discountOut = document.getElementById('preview-discount');
+  var coupon = document.getElementById('coupon-select');
+  if (!form || !out) { return; }
+  function num(el) {
+    var v = parseFloat(el.value);
+    return isNaN(v) ? 0 : v;
+  }
+  function price(el) {
+    return parseFloat(el.getAttribute('data-price')) || 0;
+  }
+  function subtotal() {
+    var total = 0;
+    form.querySelectorAll('tbody tr').forEach(function (row) {
+      var qty = row.querySelector('input.qty');
+      if (!qty) { return; }                  // 非商品行（如空态行）
+      var q = num(qty);
+      if (q <= 0) { return; }                // 与服务端口径一致：杯数 0 的行连加料一起忽略
+      total += q * price(qty);
+      row.querySelectorAll('input.addon').forEach(function (addon) {
+        total += num(addon) * price(addon);
+      });
+    });
+    return total;
+  }
+  /* 券：按当前合计把小门槛未满足的选项置灰（仅体验控制，不提交任何金额）。
+     关掉 JS 时全部选项保持可选，由服务端在提交时判定强弱。 */
+  function syncCoupons(total) {
+    if (!coupon) { return; }
+    var selected = null;
+    Array.prototype.forEach.call(coupon.options, function (opt) {
+      if (!opt.value) { return; }                       // “不使用” 始终可选
+      var need = parseFloat(opt.getAttribute('data-threshold')) || 0;
+      var ok = total >= need;
+      opt.disabled = !ok;
+      opt.textContent = opt.textContent.replace('（本单不满门槛）', '');
+      if (!ok) { opt.textContent += '（本单不满门槛）'; }
+      if (ok && opt.selected) { selected = opt; }
+    });
+    if (!selected && coupon.selectedIndex > 0) {
+      coupon.value = '';                                // 已选券变得不可用 → 退回“不使用”
+    }
+    if (discountOut) {
+      var current = coupon.options[coupon.selectedIndex];
+      var off = current && current.value ? (parseFloat(current.getAttribute('data-discount')) || 0) : 0;
+      discountOut.textContent = off > 0
+        ? '－ 券优惠 ' + off.toFixed(2) + ' 元 → 预计应付 ' + Math.max(0, total - off).toFixed(2) + ' 元'
+        : '';
+    }
+  }
+  function update() {
+    var total = subtotal();
+    out.textContent = total.toFixed(2);
+    syncCoupons(total);
+  }
+  form.addEventListener('input', update);
+  if (coupon) { coupon.addEventListener('change', update); }
+  update();
+})();
+
+/* 平台单信息只有渠道选“外卖平台”时才需要：仅做视觉提示，不禁用字段，
+   提交时到底用不用由服务端按 channel 判定（顾客本就没有这组字段）。 */
+(function () {
+  var channel = document.querySelector('select[name="channel"]');
+  var box = document.querySelector('.platform-box');
+  if (!channel || !box) { return; }
+  function sync() {
+    var on = channel.value === 'PLATFORM';
+    box.style.opacity = on ? '1' : '.55';
+    box.querySelectorAll('input, select').forEach(function (el) { el.disabled = !on; });
+  }
+  channel.addEventListener('change', sync);
+  sync();
+})();
+</script>
+{% endblock %}

@@ -41,7 +41,7 @@ body {
 .who { color: var(--muted); margin-right: .75rem; }
 
 .content {
-  max-width: 860px;
+  max-width: 1100px;
   margin: 1.5rem auto;
   padding: 0 1.25rem 2rem;
 }
@@ -114,6 +114,14 @@ h2 { font-size: 1.1rem; margin: 1.75rem 0 .5rem; }
   padding: .75rem 1rem;
 }
 
+/* 表单提交失败的回填提示条（错误码可见，明细只在日志） */
+.banner.error {
+  background: #fef2f2;
+  border-color: #fecaca;
+  margin-bottom: 1rem;
+}
+.banner.error p { margin: .25rem 0; }
+
 .note { color: var(--muted); font-size: .85rem; }
 
 .foot {
@@ -157,3 +165,64 @@ code {
   padding: .05rem .5rem;
   font-size: .8rem;
 }
+
+/* 订单页补充：状态徽标按订单状态着色 */
+.badge.st-pending   { background: #fffbeb; border-color: #fde68a; color: #92400e; }
+.badge.st-paid      { background: #ecfdf5; border-color: #a7f3d0; color: #065f46; }
+.badge.st-making    { background: #eff6ff; border-color: #bfdbfe; color: #1e40af; }
+.badge.st-completed { background: #f3f4f6; border-color: #d1d5db; color: #374151; }
+.badge.st-cancelled { background: #f9fafb; border-color: #e5e7eb; color: #6b7280; }
+.badge.st-refunded  { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+
+/* 订单页补充：信息面板、操作区、分页、表格内输入框 */
+.panel {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: .5rem 1rem;
+}
+.actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .75rem; }
+.actions form { margin: 0; }
+.form.bordered {
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: .5rem .75rem;
+  background: #fff;
+}
+.btn.danger { border-color: #fecaca; color: #991b1b; background: #fef2f2; }
+.btn.danger:hover { border-color: #dc2626; }
+.pager { display: flex; align-items: center; gap: .5rem; color: var(--muted); font-size: .85rem; }
+
+.table.order-form td { vertical-align: top; }
+.table.order-form input[type="number"] {
+  width: 4.5rem;
+  padding: .3rem .4rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+}
+.table.order-form select {
+  padding: .3rem .4rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  background: #fff;
+}
+.table.order-form label.check { display: flex; align-items: center; gap: .3rem; white-space: nowrap; }
+.table tr.sub td { color: var(--muted); font-size: .9rem; }
+
+/* 订单页补充：单号/状态徽标/行内按钮不折行（宽表挤压时仍保持可读） */
+.table td code,
+.table td .badge,
+.table td .btn { white-space: nowrap; }
+.table td .btn { display: inline-block; padding: .2rem .6rem; font-size: .85rem; }
+
+.platform-box {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: .5rem .75rem;
+  background: #fff;
+  display: grid;
+  gap: .5rem;
+}
+.platform-box legend { font-size: .9rem; color: var(--muted); padding: 0 .3rem; }

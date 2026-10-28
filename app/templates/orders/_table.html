@@ -1,0 +1,31 @@
+{# 订单表格：列表页与「我的订单」共用；show_member 控制是否显示会员列 #}
+<table class="table wide">
+  <thead>
+    <tr>
+      <th>单号</th><th>创建时间</th><th>渠道 / 方式</th>
+      {% if show_member %}<th>会员</th>{% endif %}
+      <th>券前</th><th>优惠</th><th>应付</th><th>状态</th><th>支付</th><th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for o in orders %}
+    <tr>
+      <td><code>{{ o.order_id }}</code></td>
+      <td>{{ o.created_at.strftime('%Y-%m-%d %H:%M') if o.created_at else '' }}</td>
+      <td>
+        {{ channels.get(o.channel, o.channel) }}
+        {% if o.order_mode %}<span class="note">· {{ modes.get(o.order_mode, o.order_mode) }}</span>{% endif %}
+      </td>
+      {% if show_member %}<td>{% if o.member_id %}<code>{{ o.member_id }}</code>{% else %}<span class="note">非会员</span>{% endif %}</td>{% endif %}
+      <td>{{ o.item_subtotal }}</td>
+      <td>{{ o.coupon_discount }}</td>
+      <td><strong>{{ o.total_amount }}</strong></td>
+      <td><span class="badge st-{{ o.order_status|lower }}">{{ statuses.get(o.order_status, o.order_status) }}</span></td>
+      <td>{{ pays.get(o.pay_method, o.pay_method) if o.pay_method else '—' }}</td>
+      <td><a class="btn" href="{{ url_for('order.detail', order_id=o.order_id) }}">详情</a></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="{{ 10 if show_member else 9 }}" class="note">没有符合条件的订单。</td></tr>
+    {% endfor %}
+  </tbody>
+</table>

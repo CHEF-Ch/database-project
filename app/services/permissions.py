@@ -91,3 +91,28 @@ def role_required(permission: str):
         return wrapper
 
     return decorator
+
+
+def role_required_any(*permissions: str):
+    """要求已登录且具备其中**任一**权限点。
+
+    用于“同一入口、不同角色不同视野”的页面，例如订单详情：店员/制作员/店长凭
+    ``order.read`` 看全量，顾客凭 ``order.read_own`` 只能看自己的单——行级过滤仍由
+    业务层按 session 的 ``member_id`` 做（``order_service.get_order_detail``）。
+    """
+
+    def decorator(view):
+        @wraps(view)
+        @login_required
+        def wrapper(*args, **kwargs):
+            role = current_role()
+            if not (PERMISSIONS.get(role or "", set()) & set(permissions)):
+                raise AppError(
+                    ErrCode.FORBIDDEN,
+                    detail=f"role={role} lacks any of {permissions}",
+                )
+            return view(*args, **kwargs)
+
+        return wrapper
+
+    return decorator

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}订单 {{ order.order_id }} · MilkTeaShop{% endblock %}
+
+{% block content %}
+<h1>
+  订单 <code>{{ order.order_id }}</code>
+  <span class="badge st-{{ order.order_status|lower }}">{{ statuses.get(order.order_status, order.order_status) }}</span>
+</h1>
+
+<div class="panel">
+  <p class="kv">渠道：{{ channels.get(order.channel, order.channel) }}
+    {% if order.order_mode %}· {{ modes.get(order.order_mode, order.order_mode) }}{% endif %}</p>
+  <p class="kv">会员：{% if order.member_id %}<code>{{ order.member_id }}</code>{% else %}<span class="note">非会员</span>{% endif %}
+    ｜经办员工：{% if order.employee_id %}<code>{{ order.employee_id }}</code>{% else %}<span class="note">—</span>{% endif %}</p>
+  <p class="kv">创建：{{ order.created_at }}　支付：{{ order.paid_at or '—' }}　完成：{{ order.completed_at or '—' }}</p>
+  <p class="kv">支付方式：{{ pays.get(order.pay_method, order.pay_method) if order.pay_method else '—' }}
+    {% if order.pay_txn_no %}｜流水号：<code>{{ order.pay_txn_no }}</code>{% endif %}</p>
+  <p class="kv">
+    券前 <strong>{{ order.item_subtotal }}</strong>
+    － 券优惠 <strong>{{ order.coupon_discount }}</strong>
+    ＝ 应付 <strong>{{ order.total_amount }}</strong>
+    {% if order.refund_amount and order.refund_amount != 0 %}
+      　｜已退 <strong>{{ order.refund_amount }}</strong>（{{ order.refund_at or '—' }}）
+    {% endif %}
+  </p>
+</div>
+
+<h2>明细</h2>
+<table class="table wide">
+  <thead>
+    <tr><th>行</th><th>商品</th><th>糖 / 冰 / 温</th><th>单价</th><th>杯数</th><th>小计</th></tr>
+  </thead>
+  <tbody>
+    {% for it in items %}
+    <tr>
+      <td>{{ it.item_line }}</td>
+      <td><code>{{ it.product_id }}</code> <span class="note">{{ it.size }}</span></td>
+      <td>{{ it.sugar_label }} / {{ it.ice_label }} / {{ it.temp_label }}</td>
+      <td>{{ it.unit_price }}</td>
+      <td>{{ it.qty }}</td>
+      <td>{{ it.amount }}</td>
+    </tr>
+      {% for a in it.addons %}
+      <tr class="sub">
+        <td></td>
+        <td colspan="2">＋加料 {{ a.material_name }}</td>
+        <td>{{ a.addon_price }}</td>
+        <td>{{ a.qty }} 份</td>
+        <td>{{ a.amount }}</td>
+      </tr>
+      {% endfor %}
+    {% else %}
+    <tr><td colspan="6" class="note">该订单没有明细（异常数据，请复核）。</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+<p class="note">单价与加料价取下单时的快照，之后改主数据不影响历史订单。</p>
+
+{% if platform %}
+<h2>平台信息</h2>
+<table class="table">
+  <tbody>
+    <tr><th>平台</th><td>{{ platforms.get(platform.platform_name, platform.platform_name) }}</td></tr>
+    <tr><th>平台单号</th><td><code>{{ platform.platform_order_no }}</code></td></tr>
+    <tr><th>配送地址</th><td>{{ platform.delivery_address }}</td></tr>
+    <tr><th>配送费</th><td>{{ platform.delivery_fee }}</td></tr>
+    <tr><th>抽成</th><td>{{ platform.commission_rate }}（{{ platform.commission_amount }}）</td></tr>
+  </tbody>
+</table>
+{% endif %}
+
+{% if stock_logs %}
+<h2>本单库存流水（店长可见）</h2>
+<table class="table wide">
+  <thead><tr><th>流水号</th><th>原料</th><th>类型</th><th>数量</th><th>时间</th></tr></thead>
+  <tbody>
+    {% for l in stock_logs %}
+    <tr><td>{{ l.stock_log_id }}</td><td>{{ l.material_name }}</td><td>{{ l.log_type }}</td><td>{{ l.qty }}</td><td>{{ l.created_at }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if actions %}
+<h2>可执行操作</h2>
+<div class="actions">
+  {% if 'pay' in actions %}
+  <form method="post" action="{{ url_for('order.pay', order_id=order.order_id) }}" class="form inline bordered">
+    <label>支付方式
+      <select name="pay_method">
+        {% for code, label in pays.items() %}
+          <option value="{{ code }}" {% if order.pay_method == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>支付流水号（线上支付必填，现金/余额可留空）
+      <input name="pay_txn_no" maxlength="50" placeholder="如 ON20261025001">
+    </label>
+    <button class="btn primary" type="submit">确认支付</button>
+  </form>
+  {% endif %}
+
+  {% if 'cancel' in actions %}
+  <form method="post" action="{{ url_for('order.cancel', order_id=order.order_id) }}"
+        onsubmit="return confirm('取消后预占库存与券会释放，确定取消？');">
+    <button class="btn" type="submit">取消订单</button>
+  </form>
+  {% endif %}
+
+  {% if 'to_making' in actions %}
+  <form method="post" action="{{ url_for('order.update_status', order_id=order.order_id) }}">
+    <input type="hidden" name="to_status" value="MAKING">
+    <button class="btn primary" type="submit">开始制作</button>
+  </form>
+  {% endif %}
+
+  {% if 'to_completed' in actions %}
+  <form method="post" action="{{ url_for('order.update_status', order_id=order.order_id) }}">
+    <input type="hidden" name="to_status" value="COMPLETED">
+    <button class="btn primary" type="submit">完成制作</button>
+  </form>
+  {% endif %}
+
+  {% if 'refund' in actions %}
+  <form method="post" action="{{ url_for('order.refund', order_id=order.order_id) }}"
+        onsubmit="return confirm('整单退款会冲正积分、退回余额与券，库存不恢复，确定退款？');">
+    <button class="btn danger" type="submit">整单退款</button>
+  </form>
+  {% endif %}
+</div>
+<p class="note">按钮按角色与订单状态显隐只是体验控制；真正的校验在业务层（状态机 + 角色），数据库层再按受限登录兜底。</p>
+{% endif %}
+
+<p>
+  {% if 'order.read' in perms %}<a class="btn" href="{{ url_for('order.list_orders') }}">返回订单列表</a>{% endif %}
+  {% if 'order.read_own' in perms %}<a class="btn" href="{{ url_for('order.my_orders') }}">我的订单</a>{% endif %}
+</p>
+{% endblock %}

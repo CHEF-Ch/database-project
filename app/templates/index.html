@@ -22,6 +22,9 @@
     {% if 'order.read' in perms %}
       <a class="card" href="{{ url_for('order.list_orders') }}">订单</a>
     {% endif %}
+    {% if 'order.create' in perms %}
+      <a class="card" href="{{ url_for('order.new_order') }}">下单</a>
+    {% endif %}
     {% if 'order.read_own' in perms %}
       <a class="card" href="{{ url_for('order.my_orders') }}">我的订单</a>
     {% endif %}

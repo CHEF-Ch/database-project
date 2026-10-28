@@ -1,0 +1,140 @@
+================================================================================================
+第 7 周 ⑤ 订单页面自检：路由权限 + 页面渲染 + 下单/支付/取消/退款/状态
+================================================================================================
+生成时间：2026-10-28 11:50:26
+Python 3.13.12　DB_AUTH=trusted　DB_NAME=MilkTeaShop_v01
+执行方式：Flask 测试客户端（真实 HTTP 会话）+ 外层事务 + SAVEPOINT，跑完整轮回滚，seed 不变
+
+用例                                                预期    实际  结果  备注
+------------------------------------------------------------------------------------------------
+GET /orders/                                     401   401  PASS  未登录
+未登录错误页不含实现细节                                       1     1  PASS  
+GET /orders/                                     200   200  PASS  店员可看全量
+列表含基线订单 202609160002                               1     1  PASS  
+GET /orders/?status=PENDING                      200   200  PASS  按状态筛选
+筛选结果含待支付单 202609160005                             1     1  PASS  
+筛选结果不含已完成单 202609160002                            1     1  PASS  
+GET /orders/?status=BOGUS                        400   400  PASS  非法状态 E1001
+GET /orders/?date_from=2026-13-01                400   400  PASS  非法日期 E1001
+GET /orders/?limit=abc                           400   400  PASS  非法分页 E1001
+GET /orders/?limit=2                             200   200  PASS  分页正例：每页 2 条
+分页只渲染 limit 行                                      1     1  PASS  2
+分页出现下一页链接（offset=2）                                1     1  PASS  
+GET /orders/?limit=2&offset=2                    200   200  PASS  分页第二页
+两页内容不同（偏移生效）                                       1     1  PASS  
+GET /orders/?q=NOPE-NOT-EXIST                    200   200  PASS  列表空态
+空结果不显示“第 1—0 条”                                    1     1  PASS  
+GET /orders/new                                  200   200  PASS  店员可下单
+下单页渲染商品行 qty.P0000001                              1     1  PASS  
+下单页渲染加料行                                           1     1  PASS  
+GET /orders/new?member_id=C0000002               200   200  PASS  店员代客选会员
+券下拉与库内可用券一致（有则出现，无则不出现）                            1     1  PASS  库内可用券 1 张
+券选项带门槛/优惠数据属性（有券时）                                 1     1  PASS  
+下单页有“按会员号列券”的 GET 入口                               1     1  PASS  
+GET /orders/202609160002                         200   200  PASS  店员看详情
+店员详情不显示整单退款按钮                                      1     1  PASS  
+店员详情不显示开始制作按钮                                      1     1  PASS  
+GET /orders/P9999999                             404   404  PASS  订单不存在 E3001
+GET /orders/mine                                 200   200  PASS  店员查“我的订单”
+店员无会员号时给出空态提示                                      1     1  PASS  
+GET /orders/                                     200   200  PASS  制作员可看订单队列
+GET /orders/new                                  403   403  PASS  制作员不能下单
+GET /orders/202609160001                         200   200  PASS  制作员看已完成单
+已完成单无状态按钮                                          1     1  PASS  
+GET /orders/                                     403   403  PASS  库存管理员无订单读权限
+GET /orders/new                                  403   403  PASS  库存管理员不能下单
+GET /orders/202609160002                         403   403  PASS  库存管理员既无 order.read 也无 order.read_own → 详情 403
+GET /orders/                                     200   200  PASS  店长可看订单
+GET /orders/new                                  403   403  PASS  店长无 order.create（权限矩阵）
+GET /orders/202609160004                         200   200  PASS  店长看平台单详情
+平台单详情含平台信息                                         1     1  PASS  
+GET /orders/202609160006                         200   200  PASS  店长看已退款单
+已退款单展示退款额（金额本身，不只是状态徽标）                            1     1  PASS  12.00
+GET /orders/                                     403   403  PASS  顾客不能看全量订单
+GET /orders/mine                                 200   200  PASS  顾客看我的订单
+我的订单含 C0000001 的单                                  1     1  PASS  
+我的订单不含 C0000002 的单                                 1     1  PASS  
+GET /orders/202609160002                         200   200  PASS  顾客看自己的单
+GET /orders/202609160005                         404   404  PASS  顾客看别人的单 → 404（IDOR）
+越权详情页不含他人订单号                                       1     1  PASS  
+GET /orders/new                                  200   200  PASS  顾客可自助点单
+顾客下单页不出现平台单字段                                      1     1  PASS  
+顾客下单页会员号取自 session                                 1     1  PASS  
+POST /orders/                                    302   302  PASS  店员现金单
+现金单已落库                                             1     1  PASS  202610280001
+GET /orders/202610280001                         200   200  PASS  下单后的重定向目标可访问
+详情页展示新单号                                           1     1  PASS  
+现金单状态 PAID                                         1     1  PASS  PAID
+现金单金额 = 12.00 + 1.00 加料                            1     1  PASS  13.00
+现金单扣现存 M0000001 -30                                1     1  PASS  4470.00
+现金单写 SALE 流水                                       1     1  PASS  
+现金单明细糖/冰/温快照                                       1     1  PASS  
+现金单加料价快照 1.00                                      1     1  PASS  
+POST /orders/                                    302   302  PASS  顾客自助下单
+自助单状态 PENDING                                      1     1  PASS  PENDING
+会员号只取 session（C0000001）                            1     1  PASS  C0000001
+自助单只预占不改现存                                         1     1  PASS  4470.00
+自助单预占 +30                                          1     1  PASS  60.00
+POST /orders/                                    403   403  PASS  顾客伪造平台单 → 403
+伪造平台单未落库                                           1     1  PASS  
+POST /orders/202610280002/pay                    400   400  PASS  线上支付缺流水号 E1001
+POST /orders/202610280002/pay                    302   302  PASS  顾客支付自己的单
+支付后状态 PAID                                         1     1  PASS  PAID
+支付后预占归零                                            1     1  PASS  30.00
+支付后现存 -30                                          1     1  PASS  4440.00
+支付后会员积分 +12（满 1 元 1 分）                             1     1  PASS  118 → 130
+POST /orders/202610280002/refund                 403   403  PASS  顾客无 order.refund
+POST /orders/202609160005/pay                    404   404  PASS  顾客支付他人 PENDING 单 → 404（不泄露是否存在）
+他人单未被支付                                            1     1  PASS  
+POST /orders/202609160005/cancel                 404   404  PASS  顾客取消他人单 → 404
+他人 PENDING 单未被改动                                   1     1  PASS  
+POST /orders/                                    400   400  PASS  未选任何饮品 E1001
+POST /orders/                                    400   400  PASS  杯数非整数 E1001
+非法杯数也回填（value="abc"）                               1     1  PASS  
+失败请求未产生订单                                          1     1  PASS  
+POST /orders/                                    302   302  PASS  非本商品加料字段被页面层丢弃
+被丢弃的加料不落 order_item_addon                          1     1  PASS  
+被丢弃的加料不影响金额                                        1     1  PASS  
+POST /orders/                                    409   409  PASS  库存不足 E4001（回填表单）
+库存不足未产生订单                                          1     1  PASS  
+库存不足未改动现存                                          1     1  PASS  5.00
+失败页有回填提示条                                          1     1  PASS  
+回填杯数 2                                             1     1  PASS  
+回填糖度 HALF                                          1     1  PASS  
+回填冰量/温度                                            1     1  PASS  
+回填加料份数 1                                           1     1  PASS  1
+回填会员号                                              1     1  PASS  
+回填下单方式                                             1     1  PASS  
+POST /orders/                                    302   302  PASS  店员录入平台单
+平台单状态 PAID                                         1     1  PASS  PAID
+平台单无会员                                             1     1  PASS  None
+平台单写 1 行 order_platform                            1     1  PASS  
+平台单抽成 = 15.00 × 20% = 3.00                         1     1  PASS  
+POST /orders/202610280001/status                 409   409  PASS  PAID→COMPLETED 非法
+POST /orders/202610280001/status                 302   302  PASS  PAID→MAKING
+状态变为 MAKING                                        1     1  PASS  
+POST /orders/202610280001/status                 302   302  PASS  MAKING→COMPLETED
+状态变为 COMPLETED                                     1     1  PASS  
+completed_at 已写入                                   1     1  PASS  
+POST /orders/202610280001/refund                 403   403  PASS  店员无 order.refund
+POST /orders/202610280001/refund                 403   403  PASS  制作员无 order.refund（PERM-11）
+POST /orders/202610280001/cancel                 409   409  PASS  PAID 单不能取消（ORD-23，只能走退款）
+PAID 单状态未被取消                                       1     1  PASS  
+POST /orders/202610280001/refund                 302   302  PASS  店长整单退款
+状态变为 REFUNDED                                      1     1  PASS  REFUNDED
+退款额 = 应付 13.00                                     1     1  PASS  13.00
+退款不回补库存                                            1     1  PASS  
+退款不新增库存流水（ORD-24）                                  1     1  PASS  
+POST /orders/202610280001/refund                 409   409  PASS  重复退款 E4001
+POST /orders/202609160005/cancel                 302   302  PASS  店员取消 PENDING 单
+状态变为 CANCELLED                                     1     1  PASS  
+取消释放预占（精确差值：该单 6 种原料合计 231.00）                     1     1  PASS  231.00 → 0.00
+取消不写库存流水（ORD-22）                                   1     1  PASS  
+POST /orders/202609160005/cancel                 409   409  PASS  重复取消 E4001
+订单数 = 基线 + 新增 4（现金 / 自助 / 平台 / 加料注入单）              1     1  PASS  7 → 11
+------------------------------------------------------------------------------------------------
+总计：125 项，PASS 125，FAIL 0
+
+================================================================================================
+结论：全部通过
+================================================================================================

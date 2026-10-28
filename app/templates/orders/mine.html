@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}我的订单 · MilkTeaShop{% endblock %}
+
+{% block content %}
+<h1>我的订单</h1>
+
+{% if member_id %}
+  <p class="kv">会员号：<code>{{ member_id }}</code>（只显示绑定到该会员的订单）</p>
+{% else %}
+  <p class="banner note">
+    当前账号没有绑定会员号，因此没有“我的订单”。店员查全量订单请用
+    <a href="{{ url_for('order.list_orders') }}">订单列表</a>。
+  </p>
+{% endif %}
+
+{% if 'order.create' in perms %}
+  <p><a class="btn primary" href="{{ url_for('order.new_order') }}">自助点单</a></p>
+{% endif %}
+
+{% with show_member = False %}
+  {% include "orders/_table.html" %}
+{% endwith %}
+
+<p class="pager">
+  {% if orders %}
+    第 {{ offset + 1 }}—{{ offset + orders|length }} 条（每页 {{ limit }}）
+  {% else %}
+    共 0 条
+  {% endif %}
+  {% if prev_url %}<a class="btn" href="{{ prev_url }}">上一页</a>{% endif %}
+  {% if next_url %}<a class="btn" href="{{ next_url }}">下一页</a>{% endif %}
+</p>
+{% endblock %}

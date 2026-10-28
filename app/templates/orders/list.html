@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}订单 · MilkTeaShop{% endblock %}
+
+{% block content %}
+<h1>订单</h1>
+
+<form method="get" class="form inline">
+  <label>状态
+    <select name="status">
+      <option value="">全部</option>
+      {% for code, label in statuses.items() %}
+        <option value="{{ code }}" {% if filters.status == code %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>渠道
+    <select name="channel">
+      <option value="">全部</option>
+      {% for code, label in channels.items() %}
+        <option value="{{ code }}" {% if filters.channel == code %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>单号
+    <input name="q" value="{{ filters.q }}" placeholder="如 20260916">
+  </label>
+  <label>会员号
+    <input name="member_id" value="{{ filters.member_id }}" placeholder="如 C0000001">
+  </label>
+  <label>起
+    <input name="date_from" type="date" value="{{ filters.date_from }}">
+  </label>
+  <label>止
+    <input name="date_to" type="date" value="{{ filters.date_to }}">
+  </label>
+  <button class="btn" type="submit">筛选</button>
+</form>
+
+{% if 'order.create' in perms %}
+  <p><a class="btn primary" href="{{ url_for('order.new_order') }}">新建订单</a></p>
+{% endif %}
+
+{% with show_member = True %}
+  {% include "orders/_table.html" %}
+{% endwith %}
+
+<p class="pager">
+  {% if orders %}
+    第 {{ offset + 1 }}—{{ offset + orders|length }} 条（每页 {{ limit }}）
+  {% else %}
+    共 0 条
+  {% endif %}
+  {% if prev_url %}<a class="btn" href="{{ prev_url }}">上一页</a>{% endif %}
+  {% if next_url %}<a class="btn" href="{{ next_url }}">下一页</a>{% endif %}
+</p>
+{% endblock %}
