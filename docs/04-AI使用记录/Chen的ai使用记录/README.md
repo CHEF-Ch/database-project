@@ -240,7 +240,56 @@
 ### 待补充
 
 - 第七至九周 ①② 的提交哈希回填（按第 4 周 `120a6cc` 的做法）。
-- 步骤 ③ 的 AI 使用记录（⑦ 已在下方补齐；④⑤ 也已各有段）。
+
+## 第七至九周 ③：数据访问层（`app/dao/`，步骤 ③）
+
+> 依据：2026-10-21 的会话转录（`~/.pi/agent/sessions/…数据库大作业--/2026-10-21T02-20-22-050Z_*.jsonl`）
+> + 当天落盘的证据与提交 `3663f34`。
+> 这一轮真正值钱的不是"把 DAO 写出来"，而是**AI 报"已完成"之后被四路复核推翻**：21 项自检其实只走了
+> `manager` + trusted 一条路，sql 模式下的角色链路当时是 229/230 一片。
+
+### 已发生的协作
+
+| # | 我的输入/提问 | AI 输出/建议 | 采纳与修改 | 理由/取舍 |
+| --- | --- | --- | --- | --- |
+| 1 | 「完成3」 | 一次给出 6 个 DAO 模块（`_utils`/`product`/`inventory`/`order`/`member`/`report`）与五条设计口径：函数接收外部 `cur`（事务边界留给业务层）、全部 `?` 参数绑定、库存四动作走条件 `UPDATE`、订单号 `MAX+1` + `UPDLOCK, HOLDLOCK`、补货验收与库存调整都和流水同事务 | 采纳骨架与五条口径 | ④ 要在"订单头 + 明细 + 加料 + 库存 + 流水 + 券"上开一个事务，DAO 自己 commit 就废了 |
+| 2 | 「使用多agent交叉复核检验一遍」 | 4 路并行（2 代码 / 1 测试与证据 / 1 架构一致性），结论写得很克制："DAO 主干质量不错，但第 ③ 步不能无条件算'完全完成'" | 采纳结论，**否掉自己刚说的"已完成"** | 自己顺着自己的思路验，只能验出"我确实是这么写的" |
+| 3 | （复核同时建议把 ③ 从"已完成"改回"进行中/待复核"） | 给了 6 条 P1 + 7 条 P2 与修复顺序 1→6：库存负数校验 → 券归属 → 订单感知幂等 → 先决策 sql 是否属验收路径 → 错误分类/事务语义 → 补测试 | 回「修」：直接按序修，不先改状态 | 证据只支持"不完整"，没必要走一轮状态折返；修完用同一批证据收口 |
+| 4 | （我要求把 `DB_AUTH=sql` 纳入验收） | 两条路：补 `login_app`/`role_app` 统一写事务账户，或明确声明"写事务用 trusted、sql 只做权限演示" | 选第一条 | 任务原文要求"关键数据库操作使用受限账户"，那就得让受限账户真能跑完整写事务，而不是绕开 |
+| 5 | （复核指出的越权面） | `get_order_detail` 无会员过滤（顾客直接调用即 IDOR），且非平台单也无条件查 `order_platform`（权限必失败） | 采纳：新增 `get_order_detail_for_member`，非平台单不查平台表 | 行级过滤不能指望页面层，得在 DAO 就有带会员边界的入口 |
+
+### AI 输出中经复核推翻/纠正的点（均为实测复现，不是"看代码觉得"）
+
+| # | 情形 | 处理 |
+| --- | --- | --- |
+| 1 | **负数库存可反向操作**：`reserve_stock(-10)` 返回 1，`reserved_qty` 从 30 降到 20；`deduct_available(-100)` 让 `stock_qty` 从 4500 涨到 4600 | 四个库存动作统一校验 `qty > 0`，非法抛 `E1001` |
+| 2 | **券可跨订单改绑**：券先 lock 到订单 A，再 `use_coupon` 传订单 B，券变 `USED` 且 `used_order_id=B`，A 的折扣失去券依据 | `lock_coupon` 要求 `used_order_id IS NULL`；`use/return_coupon` 校验订单归属 |
+| 3 | **库存确认不幂等**：先为 A 预占 100、B 预占 120，`confirm_reserved(100)` 调两次后 `reserved_qty=50`——把 B 的预占吃掉了 | 新增 `confirm_order_stock` / `deduct_order_stock`（幂等键 `order_id + material_id + SALE`）与 `cancel_order_with_stock`（`PENDING → CANCELLED` 条件更新做闸门） |
+| 4 | **`DB_AUTH=sql` 下角色链路大量 229/230**：maker 查订单详情 → 229（`item_material`）、maker 改状态 → 230、clerk 预占库存 → 230、customer 查自己订单详情 → 229（`order_platform`），而 manager 正常 | 新增 `login_app → role_app` 写事务账户；maker 补读 `item_material`/`order_platform` + 写 `completed_at`；manager 补积分/余额流水写；**明确不给 cashier 库存写权限**（权限矩阵不动） |
+| 5 | **`E5003` 实际不可达**：死锁 1205/1222 落到 `E5001` 503，未知 DB 错误也被伪装成"服务暂不可用"，等于把 schema/代码缺陷藏起来 | `1205/1222/40xxx` → `E5003`；未知 DB 错误 → `E9001`；commit 失败 → `E5003` |
+| 6 | **21 项自检全走 `manager` + trusted**：没有一条覆盖 sql 角色路径，也没有负数、券跨单、退款拒绝、状态拒绝、`for_update`、真实 `2627` | 补到 **37 项**；另新增 `scripts/dao_roles_test.py`，**7/7 角色路径**通过 |
+
+**如实记一条当时没修的**：复核 P2 里"测试写死绝对行数（5 商品 / 7 订单 / **4500 库存**），一旦有人真写入就脆断"——这条**没改**，
+`scripts/dao_test.py:59` 至今仍是 `assertEqual(material["stock_qty"], Decimal("4500.00"))`。现在能过是因为所有写用例都回滚、
+库存回到 4500；有人在 v01 上真写入后它会误红。（⑦ 的 `integration_test.py` 里同类断言已改为"取前后差值"。）
+
+### 人工验证证据
+
+| 检查 | 结果 |
+| --- | --- |
+| `python scripts/dao_test.py` | **37/37 OK** |
+| `python scripts/dao_roles_test.py` | **7/7 passed**（maker / clerk / app / customer / stock / manager） |
+| `python scripts/verify_db_logins.py` | **17/17 ALL PASSED** |
+| `python scripts/smoke_test.py` | **ALL CHECKS PASSED**，指纹 236 MATCH |
+| `MilkTeaShop_v01` 业务数据 | 商品 5 / 订单 7 / 库存流水 36 / 补货单 2 / 会员券 3，行数与 236 指纹均未变 |
+
+证据：`result/第7周-③DAO自检-20261021.txt`、`result/第7周-③DAO角色自检-20261021.txt`、
+`result/第7周-③交叉复核-20261021.md`、`result/第7周-①受限登录验证-20261021.txt`；提交 `3663f34`。
+
+### 待补充
+
+- 本次提交哈希：`3663f34`（2026-10-21，同日提交内已含）。
+- ③ 的 P2「测试写死绝对行数」未修，已记入上表；是否在 ⑧ 一并改成差值断言，待定。
 
 ## 第七至九周 ⑤：订单页面与核心接口（`app/pages/order_routes.py`、`app/templates/orders/`）
 
@@ -312,7 +361,7 @@
 - 复核报告：`result/第7周-④业务层复核-20261028.md`（5 条逐条附实测数字与处置结论）。
 - 提交：`587b447`（“第七至九周 ④ 复核：订单业务层交叉复核，五处收口”）。
 - 修复后重跑：`dao_test.py` 37/37、`order_service_test.py` **29/29**（新增 4 条回归）、`dao_roles_test.py` 7/7、
-  `smoke_test.py` ALL PASSED（指纹 236）、`order_pages_test.py` 125/125（`trusted` 与 `sql` 各一遍）。
+  `smoke_test.py` ALL PASSED（指纹 236）、`order_pages_test.py` 125/125（`trusted` 与 `sql` 各一遍；sql 轮是 `role_app` 单连接，角色级 DB 权限由 ① 的 `verify_db_logins.py` 与 ⑦ 的 PERM-16/17/18 覆盖）。
 - 证据文件：`result/第7周-③DAO自检-20261028.txt`、`result/第7周-④订单业务层自检-20261028.txt`。
 - seed 未变：7 单 / 12 明细 / 3 加料 / 36 流水 / 3 券（`UNUSED 1 / USED 1 / RETURNED 1`）。
 
@@ -389,5 +438,4 @@
 ### 待补充
 
 - 本次提交哈希：`b8ceb93`（已回填到 `docs/05-组内分工.md`）。
-- 步骤 ③ 的 AI 使用记录整段仍缺（④⑤⑦ 都有段，唯独 ③ 没有），⑧ 一并补。
 
