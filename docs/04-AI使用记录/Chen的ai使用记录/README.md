@@ -240,7 +240,7 @@
 ### 待补充
 
 - 第七至九周 ①② 的提交哈希回填（按第 4 周 `120a6cc` 的做法）。
-- 步骤 ③—⑧ 的 AI 使用记录。
+- 步骤 ③ 的 AI 使用记录（⑦ 已在下方补齐；④⑤ 也已各有段）。
 
 ## 第七至九周 ⑤：订单页面与核心接口（`app/pages/order_routes.py`、`app/templates/orders/`）
 
@@ -340,3 +340,54 @@
 此后所有验证一律改用 `test_client` + 外层事务回滚。
 
 证据：`result/第7周-⑤交叉复核-20261028.md`。
+
+---
+
+## 第七至九周 ⑦：集成测试与异常验证（`scripts/integration_test.py`）
+
+> 接手时的现状：`docs/09-应用开发/测试用例.md` 的 130 条用例是 10-21 写好的（用例先行），
+> 但没有任何脚本按用例 ID 落过断言——现有五个脚本（`smoke_test` 39、`dao_test` 37、
+> `order_service_test` 29、`order_pages_test` 125、`permission_matrix_test` 47）是**行为**覆盖，
+> 全靠人读才能对上用例。⑦ 的活因此不是"再写一遍测试"，而是**把 130 条用例变成可复跑、可对号入座的总回填**。
+
+### 已发生的协作
+
+| # | 我给了 AI 什么 | AI 输出了什么 | 我采纳/修改了什么 | 为什么 |
+| --- | --- | --- | --- | --- |
+| 1 | 用例文档 A–J 组、现有五个脚本、`.env.example`、库基线（17 表 127 行） | 「一个总入口 + 分组注册表」的思路：130 条按 ID 登记、逐条断言、一条一行输出 | 采纳骨架；但**否掉了"全部跑在一个事务里"**——并发用例必须真提交，于是分了 A–H（回滚）/ I（沙箱真提交）/ J（外部环境）三档 | 用单一 harness 跑 I 组只能得到"顺序执行的假并发" |
+| 2 | 沙箱怎么做 | `scripts/create_test_db.sql`：`BACKUP … COPY_ONLY` → `RESTORE AS MilkTeaShop_test`，只删/建测试库 | 采纳；补了"绝不复用 `create_v01_copy.sql`"的警告（那个脚本 DROP 的是应用库 `MilkTeaShop_v01`） | 项目里已有一个"建副本"脚本，命名相近但用途完全相反，不写清楚迟早有人踩 |
+| 3 | REPRO-01 要不要真跑 | 两条路：沿用第 3 周证据 / 真跑（会 `DROP` 重建 v0.1） | **选真跑**，并要求"先备份 v0.1、失败自动 RESTORE 回滚" | 第 4 周把约束从 `01-schema.sql` 拆到 `constraint.sql` 后，这条链**从来没被整体跑过**；沿用旧证据等于没验 |
+
+### AI 输出中经我纠正的点（含"测试自己说谎"的坑）
+
+| # | 情形 | 处理 |
+| --- | --- | --- |
+| 1 | harness 把三处 `db_cursor` 换成"同一连接 + SAVEPOINT"，但**漏了真实 `db_cursor` 的异常分类**（pyodbc → AppError） | 补上 `classify_db_error`：否则 `create_order` 的"订单号碰撞重试"（只认 AppError）在测试里永不触发——ORD-21 会假失败，而真实环境其实是对的 |
+| 2 | AUTH-09「篡改 session cookie」靠改本客户端 cookie | **时通时不过**：旧 cookie 仍可能被带上。改成"新客户端 + 显式 Cookie 头"发送篡改值（`integration_test.py` 对应代码），此后每次运行都稳定 401 |
+| 3 | DB-06 用 `points == SUM(points)` 断言 | 口径错：本库 `points` 存正数绝对值，方向由 `point_type` 表达（`REVERSAL` 为负）。改了断言后 C0000003（12 记分 + 12 冲正）才对得上 |
+| 4 | DB-05 只算"配方耗用"，漏了加料耗用 | 全局核对时 seed 的 `202609160001` 出现 30 的差额，追下去是 `order_item_addon` 的 `addon_qty` 没算——不是数据错，是断言错 |
+| 5 | QRY-03「低库存筛选」直接查页面里有没有高库存原料 | 页面同时渲染"调整库存"下拉（全量原料），必然命中。改为用 DAO 口径断言筛选结果集合，页面只断言可达与徽标 |
+| 6 | QRY-05 期望 `limit=0/-1/999999` → 400 | 读代码发现 `_int_arg` 是 `max(low, min(high, value))` 的**夹紧**语义 → 200 才是对的（用例原文写的就是"200/400"）。按实现断言，并把这条口径写进文档 |
+| 7 | REPRO-02 用独立连接读行数 | 在 sql 模式/事务未提交时会被自己的锁挡住（真会一直等），改为主 harness 游标 + 独立只读连接二选一，并把 J 组整体提到最前面跑 |
+| 8 | `role_customer` 缺 `mkt_member_coupon` 的 SELECT | 起初判成"设计缺口"，追 `git blame` 才发现**脚本 10-25 就加了这条授权，只是没人重跑 `app_login.sql`**——是脚本与库漂移。重跑脚本即修复，并连带刷新 ① 证据 |
+
+### 人工验证证据
+
+- `python scripts/integration_test.py --write --concurrency --real-server --repro`：
+  **130 项 PASS 126 / FAIL 0 / SKIP 4**（SKIP 为 trusted 下不成立的 DB 层权限项）。
+- `python scripts/integration_test.py --write --sql-auth --concurrency`：
+  **PASS 15 / REF 115**（按用例 §2，功能测试不重复跑 sql；DB 层 4 项 + 沙箱并发 6 项 + J 组 5 项实跑）。
+- 证据：`result/第8周-⑦集成测试-20261101.txt`、`result/第8周-⑦集成测试-20261101-sql认证.txt`、
+  `result/第7周-①受限登录验证-20261101.txt`。
+
+### 不采纳 / 留待
+
+- **不采纳**：为了"sql 模式也全绿"而在 sql 模式下让 harness 连接扮演多个角色（那等于自欺——同一连接不可能同时是
+  role_app 与 role_stock_keeper）。sql 版证据如实只跑 DB 层权限项，其余标 REF。
+- **留待 ⑧**：把 `integration_test.py` 的入口命令写进 README「第七至九周」段；`docs/03-阶段报告.md` 补第七至九周章节。
+
+### 待补充
+
+- 本次提交哈希：`待回填`（提交后回填到 `docs/05-组内分工.md`）。
+- 步骤 ③ 的 AI 使用记录整段仍缺（④⑤⑦ 都有段，唯独 ③ 没有），⑧ 一并补。
+
