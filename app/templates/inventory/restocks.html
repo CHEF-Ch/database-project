@@ -32,7 +32,7 @@
       <td><code>{{ r.restock_id }}</code></td>
       <td>{{ r.supplier_name }}</td>
       <td>{{ r.restock_status }}</td>
-      <td>{% for i in r.items %}{{ i.material_name }}×{{ i.qty }}{% if not loop.last %}、{% endif %}{% endfor %}</td>
+      <td>{% for i in r['items'] %}{{ i.material_name }}×{{ i.qty }}{% if not loop.last %}、{% endif %}{% endfor %}</td>
       <td>{{ r.employee_id }}</td>
       <td>{{ r.created_at }}</td>
       <td>{% if r.restock_status == 'PENDING' %}
