@@ -202,7 +202,7 @@
 
 ### 待补充
 
-- **`er-图.png`（导出图）尚未交**：mermaid.live 与 npm 源都不可达，当时决定先跳过；需用「本地 HTML + CDN 渲染截图」或「装 `mermaid-cli` + `PUPPETEER_SKIP_DOWNLOAD=1` 复用系统 Chrome」补出。
+- **`er-图.png`（导出图）已交**：2026-10-25 由 zeng 用 `@mermaid-js/mermaid-cli` 统一导出三张 PNG（5600px 白底），见 `docs/07-ER模型/Chen/er-图.png`；此前 mermaid.live 与 npm 源不可达的问题已绕过。
 - 第五周进度表原写“Chen/Zeng 未开始”，已改正（Chen 已交，Zeng 未开始）。
 
 ## 第七至九周 ①②：v1.0 基线确认与分层骨架
@@ -239,7 +239,7 @@
 
 ### 待补充
 
-- 第七至九周 ①② 的提交哈希回填（按第 4 周 `120a6cc` 的做法）。
+- 第七至九周 ①② 的提交哈希：`123ab7f`（已回填到 `docs/05-组内分工.md`）。
 
 ## 第七至九周 ③：数据访问层（`app/dao/`，步骤 ③）
 

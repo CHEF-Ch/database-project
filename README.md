@@ -34,7 +34,7 @@
 │   ├── 06-进度/                  # 按周记录任务流程与完成状态
 │   ├── 07-ER模型/                # 第五周：ER 图（每人一份）+ 映射清单、问题清单
 │   ├── 08-规范化/                # 第六周：依赖与范式分析、重构方案
-│   └── 09-应用开发/              # 第七至九周：应用分层结构、运行与复现
+│   └── 09-应用开发/              # 第七至九周：应用分层结构、运行与复现、操作手册、测试用例
 ├── app/                       # 第七至九周：Web 应用（分层）
 │   ├── pages/                 #   页面层：蓝图/路由，只接参、校验、渲染
 │   ├── services/              #   业务层：认证、权限矩阵、业务规则、事务边界
@@ -89,7 +89,8 @@ sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/regression.sql
 ### 第七至九周：Web 应用（v1.0）
 
 应用连接 **`MilkTeaShop_v01`（v1.0，结构指纹 236）**；分层结构、调用链与权限矩阵见
-[`docs/09-应用开发/结构与运行.md`](docs/09-应用开发/结构与运行.md)。
+[`docs/09-应用开发/结构与运行.md`](docs/09-应用开发/结构与运行.md)，逐角色操作步骤见
+[`docs/09-应用开发/操作手册.md`](docs/09-应用开发/操作手册.md)。
 
 ```powershell
 # 1) 可选：开启混合认证并使用受限 SQL 登录（DB_AUTH=trusted 时整步可跳过）
@@ -122,7 +123,7 @@ python scripts/verify_db_logins.py --write
 | 第四周：查询、视图、约束、权限 | `sql/query.sql`、`sql/view.sql`、`sql/constraint.sql`、`sql/role.sql` |
 | 第五周：ER 模型（ER 图、映射清单、问题清单） | `docs/07-ER模型/` |
 | 第六周：范式化与迁移 / 回归 | `docs/08-规范化/`、`sql/migration.sql`、`sql/regression.sql` |
-| 第七至九周：Web 应用（分层、登录、角色权限） | `app/`、`run.py`、`requirements.txt`、`scripts/`、`sql/app_login.sql`、`docs/09-应用开发/` |
+| 第七至九周：Web 应用（分层、登录、角色权限） | `app/`、`run.py`、`requirements.txt`、`scripts/`、`sql/app_login.sql`、`docs/09-应用开发/`（结构与运行、操作手册、测试用例） |
 | 阶段报告 | `docs/03-阶段报告.md` |
 | AI 使用记录 | `docs/04-AI使用记录/`（按成员分子目录） |
 | 组内分工表 | `docs/05-组内分工.md` |
