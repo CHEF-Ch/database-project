@@ -23,7 +23,8 @@
 | ④ | `第7周-④订单业务层自检-20261028.txt`（当前口径） | `python scripts/order_service_test.py` | 29/29（首轮 25） |
 | ⑤ | `第7周-⑤订单页面自检-20261028.txt` + `…-sql认证.txt` | `python scripts/order_pages_test.py [--sql-auth] --write` | 125/125 × 2 |
 | ⑥ | `第7周-⑥权限矩阵自检-20261101.txt` + `…-sql认证.txt` | `python scripts/permission_matrix_test.py --write [--sql-auth]` | 静态 4 + 行为 47（拒 30 / 放 17） |
-| ⑦ | `第8周-⑦集成测试-20261103.txt`（当前口径，trusted） | `python scripts/integration_test.py --write --concurrency --real-server --repro` | 130 项 / PASS 126 / FAIL 0 / SKIP 4 |
+| ⑦ | `第8周-⑦集成测试-20261104.txt`（**当前口径**，trusted） | `python scripts/integration_test.py --write --concurrency --real-server --repro` | 130 项 / PASS 126 / FAIL 0 / SKIP 4（结论行已按 PASS+FAIL 计「实跑 126」） |
+| ⑦ | `第8周-⑦集成测试-20261103.txt`（交付前，同参数） | 同上 | 与 11-04 一致 |
 | ⑦ | `第8周-⑦集成测试-20261101-sql认证.txt`（sql） | 同上加 `--sql-auth` | PASS 15 / REF 115 |
 
 > **文件名里的「第N周」取实际开始周**，与 `docs/06` §二 的计划周次不完全一致：④⑤⑥ 计划列在第八周，

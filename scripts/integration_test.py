@@ -1889,28 +1889,80 @@ def _sandbox_patch_stock(materials: dict, stock: Decimal, reserved: Decimal = De
         conn.close()
 
 
+def _sandbox_new_order(client) -> str:
+    """在沙箱里下一张自助单并返回**新单号**；未真落单则抛 CaseFailure。
+
+    CONC-02/03 早期直接 ``SELECT TOP 1 order_id ... ORDER BY order_id DESC`` 取对象，
+    下单失败时会拿到上一轮的旧单：旧单若恰好满足"已支付 + 积分差额"或"已取消 + 预占不变"，
+    断言就会**静默记 PASS**。这里先校验 302 且订单数 +1，再按 Location 头取单号
+    （拿不到才退回 TOP 1，此时订单数已确认多了一单）。
+    """
+    conn = _sandbox_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM dbo.shop_order")
+        before = int(cur.fetchone()[0])
+    finally:
+        conn.close()
+    resp = client.post("/orders/", data={"channel": "COUNTER", "order_mode": "COUNTER_SELF",
+                                         "pay_method": "ONLINE", "qty.P0000003": "1"})
+    conn = _sandbox_conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM dbo.shop_order")
+        after = int(cur.fetchone()[0])
+        if resp.status_code != 302 or after != before + 1:
+            raise CaseFailure(
+                f"沙箱自助单未创建：status={resp.status_code} 订单数 {before}→{after}")
+        loc = resp.headers.get("Location", "")
+        order_id = loc.rstrip("/").rsplit("/", 1)[-1]
+        if not order_id:
+            cur.execute("SELECT TOP 1 order_id FROM dbo.shop_order ORDER BY order_id DESC")
+            order_id = cur.fetchone()[0]
+        return order_id
+    finally:
+        conn.close()
+
+
 def _run_threads(app, tasks: list) -> list:
-    """并发跑若干个 (用户名, 方法, 路径, 表单) 任务，返回 [(状态码, 位置头)]。"""
+    """并发跑若干个 (用户名, 方法, 路径, 表单) 任务，返回 [(状态码, 位置头)]。
+
+    **任何线程异常/join 超时都折成状态码 0**，让该轮判为不满足不变量（而不是让槽位停在
+    ``None``、被下游 ``None[0]`` 抛 TypeError 把整轮证据崩掉）。异常文本放进位置头，
+    便于在证据备注里看到原因。早期版本没有这层兜底：I 组一旦出错是"证据文件根本不写出"，
+    而不是"这条用例 FAIL"。
+    """
     results: list = [None] * len(tasks)
     barrier = threading.Barrier(len(tasks))
 
     def worker(index: int, task: dict) -> None:
-        client = app.test_client()
-        if task.get("username"):
-            client.post("/login", data={"username": task["username"],
-                                        "password": PASSWORD[task["username"]]})
-        barrier.wait()
-        if task["method"] == "GET":
-            resp = client.get(task["path"])
-        else:
-            resp = client.post(task["path"], data=task.get("data") or {})
-        results[index] = (resp.status_code, resp.headers.get("Location", ""))
+        try:
+            client = app.test_client()
+            if task.get("username"):
+                client.post("/login", data={"username": task["username"],
+                                            "password": PASSWORD[task["username"]]})
+            barrier.wait()
+            if task["method"] == "GET":
+                resp = client.get(task["path"])
+            else:
+                resp = client.post(task["path"], data=task.get("data") or {})
+            results[index] = (resp.status_code, resp.headers.get("Location", ""))
+        except Exception as exc:                # noqa: BLE001 —— 线程内异常必须落在该槽位
+            results[index] = (0, f"THREAD-ERR:{type(exc).__name__}:{exc}")
 
-    threads = [threading.Thread(target=worker, args=(i, t)) for i, t in enumerate(tasks)]
+    threads = [threading.Thread(target=worker, args=(i, t), daemon=True)
+               for i, t in enumerate(tasks)]
     for t in threads:
         t.start()
     for t in threads:
         t.join(timeout=60)
+    alive = [t for t in threads if t.is_alive()]
+    for i, slot in enumerate(results):
+        if slot is None:
+            results[i] = (0, "THREAD-TIMEOUT:线程未在 60s 内返回")
+    if alive:
+        # 只记录事实：让当轮判失败，不再静默继续
+        print(f"[I 组] 警告：{len(alive)} 个线程 join 超时，已按状态码 0 计入本轮", flush=True)
     return results
 
 
@@ -1949,7 +2001,7 @@ def group_concurrency(r: Runner, enabled: bool) -> None:
             seq["n"] += 1
             return f"{prefix}-{seq['n']}"
 
-        # --- 各条用例的单轮实现：返回 (是否满足不变量, 说明) ---------------
+        # --- 各条用例的单轮实现：返回 (是否满足不变量, 说明, 状态码列表) ---------------
         def round_conc01() -> tuple[bool, str]:
             """末件库存：把每种原料调成"刚好一杯"，两个并发请求只能成一个。"""
             conn = _sandbox_conn()
@@ -1979,21 +2031,18 @@ def group_concurrency(r: Runner, enabled: bool) -> None:
             codes = sorted(c[0] for c in results)
             invariants = all(_d(r[1]) <= _d(r[0]) and _d(r[1]) >= 0 for r in rows)
             ok = codes == [302, 409] and after - before == 1 and invariants
-            return ok, f"{codes} 订单+{after - before} 不超卖={invariants}"
+            return ok, f"{codes} 订单+{after - before} 不超卖={invariants}", codes
 
         def round_conc02() -> tuple[bool, str]:
             """重复支付：同一 PENDING 单、同一 pay_txn_no 并发支付，只生效一次。"""
             _sandbox_patch_stock(usage, stock=Decimal("10000"))
             client = app.test_client()
             client.post("/login", data={"username": "customer1", "password": PASSWORD["customer1"]})
-            client.post("/orders/", data={"channel": "COUNTER", "order_mode": "COUNTER_SELF",
-                                          "pay_method": "ONLINE", "qty.P0000003": "1"})
+            pay_id = _sandbox_new_order(client)
             txn_no = _uniq("⑦CONC-DUP")
             conn = _sandbox_conn()
             try:
                 cur = conn.cursor()
-                cur.execute("SELECT TOP 1 order_id FROM dbo.shop_order ORDER BY order_id DESC")
-                pay_id = cur.fetchone()[0]
                 cur.execute("SELECT points FROM dbo.member_member WHERE member_id = 'C0000001'")
                 points_before = int(cur.fetchone()[0])
                 cur.execute("SELECT stock_qty FROM dbo.item_material WHERE material_id = ?", first_material)
@@ -2020,20 +2069,17 @@ def group_concurrency(r: Runner, enabled: bool) -> None:
                   and points_after - points_before == expected_points
                   and stock_before - stock_after == usage[first_material])
             return ok, (f"{codes} 状态={status_now} 积分+{points_after - points_before}"
-                        f"（应+{expected_points}）库存-{stock_before - stock_after}")
+                        f"（应+{expected_points}）库存-{stock_before - stock_after}"), codes
 
         def round_conc03() -> tuple[bool, str]:
             """同一 PENDING 单并发取消：只释放一次预占。"""
             _sandbox_patch_stock(usage, stock=Decimal("10000"))
             client = app.test_client()
             client.post("/login", data={"username": "customer1", "password": PASSWORD["customer1"]})
-            client.post("/orders/", data={"channel": "COUNTER", "order_mode": "COUNTER_SELF",
-                                          "pay_method": "ONLINE", "qty.P0000003": "1"})
+            cancel_id = _sandbox_new_order(client)
             conn = _sandbox_conn()
             try:
                 cur = conn.cursor()
-                cur.execute("SELECT TOP 1 order_id FROM dbo.shop_order ORDER BY order_id DESC")
-                cancel_id = cur.fetchone()[0]
                 cur.execute("SELECT SUM(reserved_qty) FROM dbo.item_material")
                 reserved_before = _d(cur.fetchone()[0])
             finally:
@@ -2053,7 +2099,7 @@ def group_concurrency(r: Runner, enabled: bool) -> None:
             codes = sorted(c for c, _ in results)
             ok = (codes == [302, 409] and status_now == "CANCELLED"
                   and reserved_before - reserved_after == total_usage)
-            return ok, f"{codes} 状态={status_now} 预占 {reserved_before}→{reserved_after}"
+            return ok, f"{codes} 状态={status_now} 预占 {reserved_before}→{reserved_after}", codes
 
         def round_conc04() -> tuple[bool, str]:
             """同日 4 线程并发下单：单号全唯一、无 2627 逃逸。"""
@@ -2080,7 +2126,7 @@ def group_concurrency(r: Runner, enabled: bool) -> None:
             unique = len(set(ids)) == len(ids)
             added = len(ids) - before
             ok = codes == [302, 302, 302, 302] and unique and added == 4
-            return ok, f"{codes} 新增{added}单 单号唯一={unique}"
+            return ok, f"{codes} 新增{added}单 单号唯一={unique}", codes
 
         def round_conc05() -> tuple[bool, str]:
             """并发库存调整 +10/-10：终值正确、本轮流水净额 0。"""
@@ -2110,9 +2156,10 @@ def group_concurrency(r: Runner, enabled: bool) -> None:
                 logs, net = cur.fetchone()
             finally:
                 conn.close()
-            ok = ([c for c, _ in results] == [302, 302] and end == start
+            codes = [c for c, _ in results]
+            ok = (codes == [302, 302] and end == start
                   and int(logs) == 2 and _d(net) == _d(0))
-            return ok, f"{start}→{end} 本轮流水{int(logs)}条 净额{net}"
+            return ok, f"{start}→{end} 本轮流水{int(logs)}条 净额{net}", codes
 
         def round_conc06() -> tuple[bool, str]:
             """事务中途抛异常：订单/明细/加料/流水/预占全部回滚。"""
@@ -2156,17 +2203,21 @@ def group_concurrency(r: Runner, enabled: bool) -> None:
                 conn.close()
             ok = (raised and after_orders == before_orders and after_logs == before_logs
                   and after_reserved == before_reserved)
+            # 这条不经过 HTTP，没有状态码可判重试，故返回空列表
             return ok, (f"异常={raised} 订单{before_orders}→{after_orders} "
-                        f"流水{before_logs}→{after_logs} 预占{before_reserved}→{after_reserved}")
+                        f"流水{before_logs}→{after_logs} 预占{before_reserved}→{after_reserved}"), []
 
         def judge(cid: str, expect: str, func) -> None:
             rounds = []
             for _ in range(CONC_ROUNDS):
-                ok, note = func()
-                # 500（死锁牺牲者 E5003）属可重试的偶发情况：重跑一轮，最多 2 次
+                ok, note, codes = func()
+                # 500（死锁牺牲者 E5003）属可重试的偶发情况：重跑一轮，最多 2 次。
+                # **按状态码判**，不能按备注文本判：备注里含库存/预占的十进制值
+                # （如 1500.00 / 500.00），用 `"500" in note` 会把任何失败都误判成可重试的 500，
+                # 第二次通过就记 PASS，从而掩盖真实缺陷。
                 tries = 1
-                while not ok and "500" in note and tries < 2:
-                    ok, note = func()
+                while not ok and 500 in codes and tries < 2:
+                    ok, note, codes = func()
                     tries += 1
                     note += f"（重试{tries - 1}次）"
                 rounds.append((ok, note))
@@ -2326,13 +2377,23 @@ def group_repro(r: Runner, *, do_repro: bool, real_server: bool) -> None:
 
     # REPRO-05 README 命令可照抄（静态核对：命令里引用的脚本/文件都存在）
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    referenced = ["sql/app_login.sql", "requirements.txt", ".env.example", "run.py",
-                  "scripts/smoke_test.py", "scripts/verify_db_logins.py"]
+    manual = ROOT / "docs/09-应用开发/操作手册.md"
+    manual_text = manual.read_text(encoding="utf-8") if manual.exists() else ""
+    # 覆盖全部可复跑自检脚本、沙箱 SQL、配置与两个入口文档；比早期"只核对 6 个路径"更贴近用例名
+    referenced = ["sql/app_login.sql", "sql/migration.sql", "sql/regression.sql",
+                  "requirements.txt", ".env.example", "run.py",
+                  "scripts/smoke_test.py", "scripts/verify_db_logins.py",
+                  "scripts/dao_test.py", "scripts/dao_roles_test.py",
+                  "scripts/order_service_test.py", "scripts/order_pages_test.py",
+                  "scripts/permission_matrix_test.py", "scripts/integration_test.py",
+                  "scripts/create_v01_copy.sql", "scripts/create_test_db.sql",
+                  "docs/09-应用开发/操作手册.md"]
     missing = [p for p in referenced if not (ROOT / p).exists()]
+    not_in_readme = [p for p in referenced if p not in readme]
     r.check_truth("REPRO-05",
-                  all(p in readme for p in referenced) and not missing,
-                  "README 含全部命令且文件存在",
-                  f"缺失引用={missing}")
+                  not missing and not not_in_readme,
+                  "README/操作手册 含全部命令且文件存在",
+                  f"缺失文件={missing} README 未引用={not_in_readme} 手册={'有' if manual_text else '缺'}")
 
     # REPRO-06 证据脱敏
     proc = subprocess.run(["git", "ls-files"], cwd=str(ROOT), capture_output=True, text=True)
@@ -2378,7 +2439,8 @@ def render(r: Runner, *, sql_mode: bool, concurrency: bool, real_server: bool, d
     else:
         w("执行方式：A–H 组＝Flask 测试客户端 + 外层事务 + SAVEPOINT（整轮回滚，seed 不变）；"
           f"I 组＝{'沙箱 ' + TEST_DB + ' 真提交' if concurrency else '未执行（需 --concurrency）'}")
-    w(f"可选开关：--real-server={'是' if real_server else '否'}　--repro={'是' if do_repro else '否'}")
+    w(f"可选开关：--concurrency={'是' if concurrency else '否'}　"
+      f"--real-server={'是' if real_server else '否'}　--repro={'是' if do_repro else '否'}")
     w("")
 
     for group in GROUP_ORDER:
@@ -2405,7 +2467,8 @@ def render(r: Runner, *, sql_mode: bool, concurrency: bool, real_server: bool, d
     w("  · 每行的「预期/实际」可能含多段（同一用例做了多条断言，已合并）；")
     w("  · 失败处理按 §7：P0 阻断交付并全量重跑，P1 记录缺陷与影响范围，P2 记入已知限制。")
     w("=" * 108)
-    executed = passed + failed + skipped
+    # SKIP 是「本轮不成立、未执行」，不能算进“实跑”；REF 同理（单独统计）。
+    executed = passed + failed
     if sql_mode:
         w(f"结论：本轮实跑 {executed} 项（PASS {passed}，FAIL {failed}，SKIP {skipped}）；"
           f"另 {referred} 条 REF 本轮未执行，见 trusted 版证据")
