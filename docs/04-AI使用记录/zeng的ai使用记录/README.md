@@ -287,7 +287,7 @@ AI 写得很快，但**快不等于合格**。我形成了一套固定的审查�
 - **链接与口径**：README 目录 / 提交入口 / 7—9 周章节补操作手册；`docs/09 §1` 改为实测 Python 3.12.5，§12 改名“测试用例与操作手册”。
 - **收口**：`docs/05` 回填 Yang ⑥ 哈希 `48e97e3`、zeng ④ 改为复核后 29/29、补 ⑧ 条目；Chen / Yang 的 AI 记录按实际证据更正过期“待补充”。
 - **重跑（trusted）**：`python scripts/integration_test.py --write --concurrency --real-server --repro` → **130 项 PASS 126 / FAIL 0 / SKIP 4**（REPRO-01 真重建 110 列 / 45 CHECK / 127 行，REPRO-03 真 HTTP 236 / match），证据 `result/第8周-⑦集成测试-20261103.txt`。
-- **sql 模式未重跑（环境阻塞）**：本机实例当前为仅 Windows 认证（`IsIntegratedSecurityOnly=1`），且没有 `login_*` 服务器登录；`--sql-auth` 与 `verify_db_logins.py` 均直接报 `18456`。需管理员执行 `scripts/enable-mixed-auth.ps1` 并跑 `sql/app_login.sql` 后复跑；sql 侧沿用 11-01 证据（PASS 15 / REF 115、受限登录 17/17）。
+- **sql 模式未重跑（环境阻塞）**：本机（zeng）实例当前为仅 Windows 认证（`IsIntegratedSecurityOnly=1`），且没有 `login_*` 服务器登录；`--sql-auth` 与 `verify_db_logins.py` 均直接报 `18456`。需管理员执行 `scripts/enable-mixed-auth.ps1` 并跑 `sql/app_login.sql` 后复跑；sql 侧沿用 11-01 证据（PASS 15 / REF 115、受限登录 17/17）。
 - 提交：`d16be07`（已回填到 `docs/05` 与本节）。
 
 ### 待补充
