@@ -2,9 +2,32 @@
 
 > 存放实际运行验证的输出：sqlcmd 执行结果、非法数据被拒绝、越权操作失败、查询结果正确等。
 
-- 命名建议：`sql-validation.txt`（sqlcmd 输出）、截图按场景命名
-- 检查标准：看最后一行是否为预期的 `PASS` / `ALL TESTS PASSED`，同时检查 sqlcmd **退出码为 0**（不能只看文本）
+- 命名规范：`第N周-步骤-主题-YYYYMMDD[-sql认证].(txt|md)`，如 `第8周-⑦集成测试-20261103.txt`；截图按场景命名
+- 检查标准：看**「总计 / 结论」行**而不是最后一行——末行通常是分隔线 `=====`。判定词为
+  `结论：全部通过（无 FAIL）` / `OK`（`unittest` 口径）/ `RESULT: n/n passed` / `结论：全部符合预期`；
+  同时检查 sqlcmd **退出码为 0**（不能只看文本）
+- **SKIP 与 REF 不算通过**：`SKIP` = 当前开关/认证模式下不成立的用例，`REF` = 本轮不重复执行、由另一份证据覆盖。
+  引用「实跑 N 项」时请核对它是否把 SKIP 算进去了（2026-11-01 / 11-03 两份 ⑦ trusted 证据的结论行写「实跑 130」，实际实跑 126 + SKIP 4）。
 - 样例数据必须虚构，不包含真实姓名 / 联系方式 / 支付信息
+
+## 第七至九周证据索引（Web 应用 v1.0）
+
+> 报告/答辩引用时以下表为准；同主题有多个日期时，**`当前口径`** 那一份才是被引用的版本。
+
+| 步骤 | 证据文件 | 生成命令 | 关键数字 |
+| --- | --- | --- | --- |
+| ①② | `第7周-①②-骨架自检-20261019.txt` | `python scripts/smoke_test.py --write --real-server` | 31 行用例（30 + 1 连接失败）+ 8 项错误分类；指纹 236 |
+| ① | `第7周-①受限登录验证-20261101.txt`（当前口径） | `python scripts/verify_db_logins.py --write`（`DB_AUTH=sql`） | 17/17（T1–T17） |
+| ③ | `第7周-③DAO自检-20261028.txt`（当前口径） | `python scripts/dao_test.py` | 37/37 |
+| ③ | `第7周-③DAO角色自检-20261021.txt` | `python scripts/dao_roles_test.py` | 7 条路径 7/7 |
+| ④ | `第7周-④订单业务层自检-20261028.txt`（当前口径） | `python scripts/order_service_test.py` | 29/29（首轮 25） |
+| ⑤ | `第7周-⑤订单页面自检-20261028.txt` + `…-sql认证.txt` | `python scripts/order_pages_test.py [--sql-auth] --write` | 125/125 × 2 |
+| ⑥ | `第7周-⑥权限矩阵自检-20261101.txt` + `…-sql认证.txt` | `python scripts/permission_matrix_test.py --write [--sql-auth]` | 静态 4 + 行为 47（拒 30 / 放 17） |
+| ⑦ | `第8周-⑦集成测试-20261103.txt`（当前口径，trusted） | `python scripts/integration_test.py --write --concurrency --real-server --repro` | 130 项 / PASS 126 / FAIL 0 / SKIP 4 |
+| ⑦ | `第8周-⑦集成测试-20261101-sql认证.txt`（sql） | 同上加 `--sql-auth` | PASS 15 / REF 115 |
+
+> **文件名里的「第N周」取实际开始周**，与 `docs/06` §二 的计划周次不完全一致：④⑤⑥ 计划列在第八周，
+> 实际启动于 10-25 前后，故沿用 `第7周-` 前缀；⑦ 按第八周命名。归档时以本节为准。
 
 ## 截图清单（`fig/`）
 

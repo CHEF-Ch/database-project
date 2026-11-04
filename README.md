@@ -47,8 +47,12 @@
 │   ├── create_v01_copy.sql    # 由 v0.1 源库重建迁移副本（可重复执行，路径不写死）
 │   ├── enable-mixed-auth.ps1  # 一次性开启 SQL Server 混合认证（使用受限登录时）
 │   ├── dao_test.py            # ③ DAO 自检：37 项读写/回滚/幂等/约束分类（事务内回滚）
-│   ├── dao_roles_test.py      # ③ DAO 角色自检：DB_AUTH=sql 下 7 组角色路径（含 role_app）
-│   ├── order_service_test.py  # ④ 订单业务层自检：25 项下单/支付/取消/退款/状态（事务回滚）
+│   ├── dao_roles_test.py      # ③ DAO 角色自检：DB_AUTH=sql 下 7 条角色路径（含 role_app 两条）
+│   ├── order_service_test.py  # ④ 订单业务层自检：29 项下单/支付/取消/退款/状态（事务回滚）
+│   ├── order_pages_test.py    # ⑤ 订单页面自检：125 项（含 --sql-auth 受限登录轮）
+│   ├── permission_matrix_test.py # ⑥ 权限矩阵：静态收口 4 项 + 行为收口 47 项（拒绝 30 / 放行 17）
+│   ├── integration_test.py    # ⑦ 集成测试：130 条用例按 ID 逐条断言（A–J 十组）
+│   ├── create_test_db.sql     # ⑦ I 组并发沙箱 MilkTeaShop_test（COPY_ONLY 还原，源库只读）
 │   ├── smoke_test.py          # ⑦的雏形：骨架用例 + 错误分类 + 真实启动，可写证据
 │   └── verify_db_logins.py    # ⑦的雏形：5 个业务登录（不含 login_app）的数据库级权限正/反例
 ├── sql/
@@ -80,11 +84,15 @@ sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/00-create.sql
 sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/01-schema.sql
 # ……按需执行 constraint / seed / view / role / crud / query
 
-# 第二阶段 v1.0 迁移复现（第六周）：先备份 v0.1 为副本 MilkTeaShop_v01，
+# 第二阶段 v1.0 迁移复现（第六周）：由 v0.1 源库重建副本 MilkTeaShop_v01，
 # 再在副本上执行迁移与回归（源库不动，详见 sql/README.md）
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i scripts/create_v01_copy.sql
 sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/migration.sql
 sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/regression.sql
 ```
+
+> `scripts/create_v01_copy.sql` 用实例默认备份/数据目录，换机器不用改；副本已存在会先删除再重建。
+> 若你手头已有 `MilkTeaShop_v01`（指纹 236），可跳过这一步直接启动应用。
 
 ### 第七至九周：Web 应用（v1.0）
 
@@ -105,9 +113,16 @@ python run.py               # 默认 http://127.0.0.1:5000
 # 3) 自检：应返回 fingerprint.total = 236、match = true
 curl http://127.0.0.1:5000/health
 
-# 4) 可复跑自检（写 result/ 证据）
-python scripts/smoke_test.py --write --real-server
-python scripts/verify_db_logins.py --write
+# 4) 可复跑自检（写 result/ 证据；全部只读/可回滚，`--concurrency` 那步需先建沙箱库）
+python scripts/smoke_test.py --write --real-server                      # 骨架 31 行用例 + 错误分类
+python scripts/verify_db_logins.py --write                             # 受限登录 17 项（需 DB_AUTH=sql）
+python scripts/dao_test.py                                             # DAO 37 项（事务内回滚）
+python scripts/dao_roles_test.py                                       # DAO 角色路径 7/7（需 DB_AUTH=sql）
+python scripts/order_service_test.py                                   # 订单业务层 29 项
+python scripts/order_pages_test.py --write                             # 订单页面 125 项（另可加 --sql-auth）
+python scripts/permission_matrix_test.py --write                       # 权限矩阵 静态 4 + 行为 47
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i scripts/create_test_db.sql   # ⑦ I 组并发沙箱（只需一次）
+python scripts/integration_test.py --write --concurrency --real-server --repro   # 130 条用例
 ```
 
 演示账号（clerk1 / customer1 / maker1 / stock1 / manager1）见结构文档 §7。
