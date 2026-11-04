@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _DOTENV_LOADED = False
@@ -44,7 +45,12 @@ load_dotenv()
 class Config:
     """运行期配置（全部可由环境变量覆盖）。"""
 
-    SECRET_KEY: str = os.environ.get("SECRET_KEY", "dev-only-change-me")
+    # 未显式配置时**随机生成**（每个进程一个），而不是用仓库里公开的常量：
+    # session 的防篡改完全依赖这个密钥，公开常量意味着任何人都能离线签出
+    # {"role": "manager"} 的合法 cookie，把权限矩阵整体绕过（见 docs/09 §5）。
+    # 代价：重启进程后旧 session 失效（需重新登录）；多 worker 部署必须显式设置，
+    # 否则各 worker 密钥不同、会话会在其间乱跳。
+    SECRET_KEY: str = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 
     # ---- 数据库连接 ----
     DB_AUTH: str = os.environ.get("DB_AUTH", "trusted").lower()      # trusted | sql
