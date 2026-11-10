@@ -134,11 +134,11 @@
 
 - 本周为**文档级产出**，无 SQL 运行证据（不建表、不改表）。
 - 映射清单的"实现方式"逐条对照 `sql/constraint.sql`（45 CHECK / 25 FK / 3 级联 / 6 候选码）与 `docs/01` §4 业务规则，区分约束/代码/人工三档。
-- 待逐项核实项：R1（商品─配方）与 R14（补货单─明细）的 min=1、§5 的 7 条候选改进项、Mermaid 在 freedgo 中的最终还原。
+- 原"待逐项核实项"已由 2026-10-25 复核收口：R1（商品─配方）与 R14（补货单─明细）的 min=1 经 `docs/01` §4 确认成立；§5 的 7 条候选改进项已在 `sql/migration.sql` 落地（P1 因重名改为 `CK_shop_order_order_mode_channel`）或留 v2.0（P9）；Mermaid 由 `@mermaid-js/mermaid-cli` 导出 PNG，未用 freedgo。
 
 ### 待补充
 
-- `docs/07-ER模型/Yang/er-图.png`（freedgo 导出，待画）。
+- ~~`docs/07-ER模型/Yang/er-图.png`（freedgo 导出，待画）~~ → **已交（2026-10-25）**：由 zeng 用 `@mermaid-js/mermaid-cli` 从本目录 `er-图-mermaid底稿.md` 统一导出，5600px 宽白底；**未用 freedgo**，若课程强制 freedgo 工程需再转换（见 `docs/07-ER模型/第5周-①③复核-20261025.md` §4 遗留）。同轮按复核意见补了 `order_item_addon.addon_price` 与 R20 的 0..1。
 - 本次提交哈希：`6941e8a`（已回填到 `docs/05-组内分工.md`）。
 
 ---
@@ -171,12 +171,12 @@
 - 本周为**文档级产出**，无 SQL 运行证据（不建表、不改表）。
 - 约束缺口 P1–P8 逐条对照 `sql/constraint.sql`：确认 45 条 CHECK 中无 `CK_shop_order_platform`/`CK_shop_order_pending`/`CK_inv_stock_log_order`/`CK_inv_stock_log_restock`/`CK_member_balance_log_order`/`CK_mkt_member_coupon_used`，也无 `unit_price > 0`、`commission_amount >= 0` 及 `used_order_id` 唯一索引。
 - P3/P4/P5 与已写的 `CK_member_point_log_order` 同构性、P1/P2 的"同表跨列"归类，均已在 `constraint.sql` 源码层面确认。
-- **待复核**：问题清单的约束缺口与映射清单 §4/§5 的一致性，由第二人复核后再定稿。
+- **已复核（2026-10-25，zeng）**：问题清单的约束缺口与映射清单 §4/§5 的一致性已逐条核对，结论见 `docs/07-ER模型/第5周-①③复核-20261025.md` §1/§2.4——P1–P8、P12 在 v1.0 全部落地，P9 留 v2.0，P10/P11 已在 `docs/02` 回填。
 
 ### 待补充
 
 - 本次提交哈希：`efed5af`（已回填到 `docs/05-组内分工.md`）。
-- 第二人复核结论。
+- ~~第二人复核结论~~ → **已出（zeng，2026-10-25）**，见上一条与 `result/第5周-①③复核-20261025.txt`。
 
 ---
 
