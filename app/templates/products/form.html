@@ -7,6 +7,7 @@
 <form method="post"
       action="{% if product %}{{ url_for('product.update_product', product_id=product.product_id) }}{% else %}{{ url_for('product.create_product') }}{% endif %}"
       class="form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>商品名
     <input name="name" maxlength="100" required value="{{ product.name if product else '' }}">
   </label>

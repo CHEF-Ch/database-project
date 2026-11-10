@@ -57,6 +57,26 @@ def _check_price(value) -> Decimal:
     return price
 
 
+def _map_unique_conflict(exc: AppError) -> AppError:
+    """把 (name, size) 候选码冲突转成面向用户的精确提示。
+
+    通用文案"数据不满足约束"对用户没有信息量（任务讲解要求"前端只显示面向用户的
+    简明提示"）。这里只映射**唯一键冲突**（2627 / 2601 / UQ_item_product_*），
+    其余约束（如 547 CHECK）保持原样，避免把"违反业务规则"误报成"重名"。
+    写法与 ``order_service._is_order_id_collision`` 刻意保持同一风格。
+    """
+    if exc.code != ErrCode.DB_CONSTRAINT:
+        return exc
+    detail = exc.detail or ""
+    if "2627" in detail or "2601" in detail or "UQ_item_product" in detail:
+        return AppError(
+            ErrCode.DB_CONSTRAINT,
+            "该商品（名称 + 杯型）已存在，请改名或换杯型。",
+            detail=detail,
+        )
+    return exc
+
+
 # ---- 读 ----
 def list_products(
     q: str | None = None,
@@ -89,20 +109,23 @@ def create_product(
     unit_price,
     sale_status: str = "ON_SALE",
 ) -> dict:
-    """新增商品；重复 (name, size) 由数据库唯一约束拒绝（E5002）。"""
+    """新增商品；重复 (name, size) 由数据库唯一约束拒绝，并转成精确提示（E5002）。"""
     name = _clean_name(name)
     size = _check_size(size)
     unit_price = _check_price(unit_price)
     sale_status = _check_sale_status(sale_status)
 
-    with db_cursor("manager", commit=True) as cur:
-        return _product.create_product(
-            cur,
-            name=name,
-            size=size,
-            unit_price=unit_price,
-            sale_status=sale_status,
-        )
+    try:
+        with db_cursor("manager", commit=True) as cur:
+            return _product.create_product(
+                cur,
+                name=name,
+                size=size,
+                unit_price=unit_price,
+                sale_status=sale_status,
+            )
+    except AppError as exc:
+        raise _map_unique_conflict(exc) from exc
 
 
 def update_product(product_id: str, **changes) -> dict:
@@ -124,8 +147,13 @@ def update_product(product_id: str, **changes) -> dict:
     if not cleaned:
         raise AppError(ErrCode.PARAM_INVALID, "没有可更新的字段。")
 
-    with db_cursor("manager", commit=True) as cur:
-        if _product.get_product(cur, product_id) is None:
-            raise AppError(ErrCode.NOT_FOUND)
-        _product.update_product(cur, product_id, **cleaned)
-        return _product.get_product(cur, product_id)
+    # 注意：映射必须包住整段 ``with``——pyodbc 异常是在 db_cursor 退出时才被归类成
+    # AppError 的，只包内层 DAO 调用会漏。（create_product 同理。）
+    try:
+        with db_cursor("manager", commit=True) as cur:
+            if _product.get_product(cur, product_id) is None:
+                raise AppError(ErrCode.NOT_FOUND)
+            _product.update_product(cur, product_id, **cleaned)
+            return _product.get_product(cur, product_id)
+    except AppError as exc:                         # 改名/改杯型撞唯一键
+        raise _map_unique_conflict(exc) from exc

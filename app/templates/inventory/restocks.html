@@ -6,6 +6,7 @@
 
 <h2>新建补货单</h2>
 <form method="post" action="{{ url_for('inventory.create_restock') }}" class="form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>供应商
     <input name="supplier_name" maxlength="100" required>
   </label>
@@ -37,6 +38,7 @@
       <td>{{ r.created_at }}</td>
       <td>{% if r.restock_status == 'PENDING' %}
         <form method="post" action="{{ url_for('inventory.receive_restock', restock_id=r.restock_id) }}" style="margin:0;">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn" type="submit">验收</button>
         </form>
       {% endif %}</td>

@@ -42,7 +42,8 @@ import pyodbc
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app import create_app                                        # noqa: E402
+from app import create_app
+from _csrf_client import make_client, raw_client                                        # noqa: E402
 from app.config import Config                                     # noqa: E402
 from app.dao.connection import connect                             # noqa: E402
 from app.errors import AppError, classify_db_error                 # noqa: E402
@@ -137,7 +138,7 @@ CASES: dict[str, tuple[str, str]] = {
     "PROD-01": ("P0", "店员 GET /products/：200，列出 5 个商品"),
     "PROD-02": ("P1", "按名称模糊搜索：只含匹配商品（参数化）"),
     "PROD-03": ("P0", "店长新增合法商品：成功且落库 1 行"),
-    "PROD-04": ("P0", "新增重复 (name,size)：409 E5002，不产生重复行"),
+    "PROD-04": ("P0", "新增重复 (name,size)：409 E5002 + “名称+杯型已存在”提示，不产生重复行"),
     "PROD-05": ("P1", "新增非法杯型 HUGE：400 E1001，无脏数据"),
     "PROD-06": ("P1", "新增负价 unit_price=-1：400 E1001"),
     "PROD-07": ("P0", "店员 POST /products/：403，无新增行"),
@@ -214,7 +215,7 @@ CASES: dict[str, tuple[str, str]] = {
     "ERR-08": ("P1", "日志可追溯：含 rid/角色/错误码/路径，不含密码"),
     "ERR-09": ("P1", "错误响应体不含 SQL/表名/驱动/服务器/账号"),
     "ERR-10": ("P1", "登录表单注入 ' OR '1'='1：401 E2002，不能绕过"),
-    "ERR-11": ("P1", "session cookie 安全属性：HttpOnly、SameSite=Lax"),
+    "ERR-11": ("P1", "会话与 CSRF：HttpOnly/SameSite=Lax；无令牌或错令牌的 POST 一律 403 E2003"),
     "ERR-12": ("P1", "篡改 session cookie：退回匿名，不提权"),
     "ERR-13": ("P2", "商品名/备注含脚本：页面转义，不执行"),
     "ERR-14": ("P2", "超长/空/Unicode/emoji 输入：400 或正常处理，不 500"),
@@ -299,7 +300,7 @@ class Runner:
 
         self.app = create_app()
         self.app.config["SERVER_NAME"] = "localhost"
-        self.client = self.app.test_client()
+        self.client = make_client(self.app)
         self.rows: dict[str, tuple[str, str, str, str]] = {}
 
     # ---- 结果收集 ------------------------------------------------------
@@ -601,7 +602,7 @@ def group_auth(r: Runner) -> None:
     mid = len(raw) // 2
     flipped = "A" if raw[mid] != "A" else "B"
     tampered = raw[:mid] + flipped + raw[mid + 1:]
-    forged_client = r.app.test_client()
+    forged_client = make_client(r.app)
     forged = forged_client.get("/products/", headers={"Cookie": f"session={tampered}"})
     forged_admin = forged_client.get("/orders/", headers={"Cookie": f"session={tampered}"})
     r.check_truth("AUTH-09", forged.status_code == 401 and forged_admin.status_code == 401,
@@ -747,13 +748,16 @@ def group_product(r: Runner) -> None:
                   "302/新增 1 行且字段正确",
                   f"{resp.status_code} {before}→{after} {new_row}")
 
-    # PROD-04 重复 (name,size)
+    # PROD-04 重复 (name,size)：既要拒，也要给面向用户的精确提示（不能只说“不满足约束”）
     before = r.scalar_int("SELECT COUNT(*) FROM dbo.item_product")
     resp = r.post("/products/", {"name": "⑦集成测试-芋圆奶茶", "size": "MEDIUM", "unit_price": "16.50"})
     after = r.scalar_int("SELECT COUNT(*) FROM dbo.item_product")
-    r.check_truth("PROD-04", resp.status_code == 409 and "E5002" in resp.get_data(as_text=True)
-                  and after == before,
-                  "409 E5002/无重复行", f"{resp.status_code} {before}→{after}")
+    body = resp.get_data(as_text=True)
+    hint = "有" if "已存在" in body else "无"
+    r.check_truth("PROD-04", resp.status_code == 409 and "E5002" in body
+                  and hint == "有" and "杯型" in body and after == before,
+                  "409 E5002/名称+杯型已存在/无重复行",
+                  f"{resp.status_code} {before}→{after} 精确提示={hint}")
 
     # PROD-05 非法杯型
     resp = r.post("/products/", {"name": "⑦集成测试-杯型非法", "size": "HUGE", "unit_price": "10.00"})
@@ -1580,7 +1584,7 @@ def group_error(r: Runner) -> None:
     Config.DB_NAME = "⑦_不存在的库"
     try:
         broken_app = create_app()
-        broken = broken_app.test_client()
+        broken = make_client(broken_app)
         resp = broken.get("/health")
         body = resp.get_data(as_text=True)
     finally:
@@ -1662,15 +1666,28 @@ def group_error(r: Runner) -> None:
                   and injected_role is None,
                   "401 E2002/未登录", f"{resp.status_code} role={injected_role}")
 
-    # ERR-11 Set-Cookie 安全属性
+    # ERR-11 Set-Cookie 安全属性 + CSRF 拦截（2026-11-10 接入同步令牌后补的断言）
     resp = r.post("/login", {"username": "clerk1", "password": "clerk123"})
     cookies = resp.headers.getlist("Set-Cookie")
     joined = " ".join(cookies)
     has_httponly = "HttpOnly" in joined
     has_samesite = "SameSite=Lax" in joined
-    r.check_truth("ERR-11", has_httponly and has_samesite,
-                  "HttpOnly/SameSite=Lax",
-                  f"HttpOnly={has_httponly} SameSite=Lax={has_samesite}（不记录 cookie 取值）")
+    # 原始客户端（不自动补令牌）：先 GET 一次让会话里有令牌，再测“不带”与“带错”两条路
+    raw = raw_client(r.app)
+    raw.get("/login")
+    no_token = raw.post("/login", data={"username": "clerk1", "password": "clerk123"})
+    bad_token = raw.post("/login", data={"username": "clerk1", "password": "clerk123",
+                                         "csrf_token": "wrong-token"})
+    r.check_truth(
+        "ERR-11",
+        has_httponly and has_samesite
+        and no_token.status_code == 403 and "E2003" in no_token.get_data(as_text=True)
+        and bad_token.status_code == 403 and "E2003" in bad_token.get_data(as_text=True)
+        and resp.status_code == 302,
+        "HttpOnly/SameSite=Lax + 无令牌 403/错令牌 403/有令牌 302",
+        f"HttpOnly={has_httponly} SameSite={has_samesite} 无令牌={no_token.status_code} "
+        f"错令牌={bad_token.status_code} 有令牌={resp.status_code}（不记录 cookie 取值）",
+    )
 
     # ERR-13 XSS 转义：**自带前置数据**（不能依赖 PROD 组先跑过，否则单跑 ERR 组会假红）
     r.as_user("manager1")
@@ -1937,7 +1954,7 @@ def _run_threads(app, tasks: list) -> list:
 
     def worker(index: int, task: dict) -> None:
         try:
-            client = app.test_client()
+            client = make_client(app)
             if task.get("username"):
                 client.post("/login", data={"username": task["username"],
                                             "password": PASSWORD[task["username"]]})
@@ -2036,7 +2053,7 @@ def group_concurrency(r: Runner, enabled: bool) -> None:
         def round_conc02() -> tuple[bool, str]:
             """重复支付：同一 PENDING 单、同一 pay_txn_no 并发支付，只生效一次。"""
             _sandbox_patch_stock(usage, stock=Decimal("10000"))
-            client = app.test_client()
+            client = make_client(app)
             client.post("/login", data={"username": "customer1", "password": PASSWORD["customer1"]})
             pay_id = _sandbox_new_order(client)
             txn_no = _uniq("⑦CONC-DUP")
@@ -2074,7 +2091,7 @@ def group_concurrency(r: Runner, enabled: bool) -> None:
         def round_conc03() -> tuple[bool, str]:
             """同一 PENDING 单并发取消：只释放一次预占。"""
             _sandbox_patch_stock(usage, stock=Decimal("10000"))
-            client = app.test_client()
+            client = make_client(app)
             client.post("/login", data={"username": "customer1", "password": PASSWORD["customer1"]})
             cancel_id = _sandbox_new_order(client)
             conn = _sandbox_conn()
@@ -2367,7 +2384,7 @@ def group_repro(r: Runner, *, do_repro: bool, real_server: bool) -> None:
     # REPRO-04 5 个账号登录
     results = {}
     for username in PASSWORD:
-        client = r.app.test_client()
+        client = make_client(r.app)
         resp = client.post("/login", data={"username": username, "password": PASSWORD[username]})
         with client.session_transaction() as sess:
             results[username] = (resp.status_code, sess.get("role"))

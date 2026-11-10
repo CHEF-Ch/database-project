@@ -33,7 +33,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app import create_app                                  # noqa: E402
+from app import create_app
+from _csrf_client import make_client                                  # noqa: E402
 from app.config import Config                               # noqa: E402
 from app.services.permissions import PERMISSIONS, ROLE_LABELS  # noqa: E402
 
@@ -308,7 +309,7 @@ def main() -> int:
 
     static_rows, static_ok = run_static_checks()
     app = create_app()
-    client = app.test_client()
+    client = make_client(app)
     behavior_rows, allowed_ok = run_behavior_checks(client)
 
     ok = static_ok and all(r[3] in ("PASS", "SKIP") for r in behavior_rows)

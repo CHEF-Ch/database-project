@@ -24,7 +24,8 @@ from importlib.metadata import version
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from app import create_app                      # noqa: E402
+from app import create_app
+from _csrf_client import make_client                      # noqa: E402
 from app.config import Config                   # noqa: E402
 from app.errors import classify_db_error        # noqa: E402
 
@@ -97,7 +98,7 @@ def probe_health(client):
 
 def run_client_checks():
     app = create_app()
-    client = app.test_client()
+    client = make_client(app)
 
     health_resp, health = probe_health(client)
     rows = []
@@ -120,7 +121,7 @@ def run_client_checks():
     original = Config.DB_NAME
     Config.DB_NAME = "NoSuchDatabase_xyz"
     try:
-        bad_client = create_app().test_client()
+        bad_client = make_client(create_app())
         bad_resp = bad_client.get("/health")
         bad_body = bad_resp.get_data(as_text=True)
     finally:

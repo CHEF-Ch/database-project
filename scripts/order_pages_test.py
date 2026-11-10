@@ -31,7 +31,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from app import create_app                                    # noqa: E402
+from app import create_app
+from _csrf_client import make_client                                    # noqa: E402
 from app.config import Config                                 # noqa: E402
 from app.dao.connection import connect                        # noqa: E402
 import app.services.inventory_service as inventory_svc        # noqa: E402
@@ -97,7 +98,7 @@ class Harness:
 
         self.app = create_app()
         self.app.config["SERVER_NAME"] = "localhost"
-        self.client = self.app.test_client()
+        self.client = make_client(self.app)
         self.rows: list[tuple[str, int, int, str, str]] = []
         self.created: list[str] = []
 

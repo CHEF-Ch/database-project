@@ -1,0 +1,89 @@
+================================================================================================
+第 7 周 ⑥ 权限矩阵自检：静态收口 + 行为收口
+================================================================================================
+生成时间：2026-11-10 09:13:03
+认证模式：DB_AUTH=trusted　DB_NAME=MilkTeaShop_v01
+
+【1】规范矩阵（docs/09 §8 固化，5 角色 × 11 权限点）
+------------------------------------------------------------------------------------------------
+  clerk    : inventory.read, order.create, order.read, order.read_own, product.read
+  customer : order.create, order.read_own, product.read
+  maker    : order.read, order.update_status, product.read
+  manager  : coupon.write, inventory.read, order.read, order.refund, product.read, product.write
+  stock    : inventory.adjust, inventory.read, product.read, restock.create
+
+【2】代码内矩阵（app/services/permissions.py）
+------------------------------------------------------------------------------------------------
+  clerk    : inventory.read, order.create, order.read, order.read_own, product.read
+  customer : order.create, order.read_own, product.read
+  maker    : order.read, order.update_status, product.read
+  manager  : coupon.write, inventory.read, order.read, order.refund, product.read, product.write
+  stock    : inventory.adjust, inventory.read, product.read, restock.create
+
+【3】路由已接线的权限点（AST 扫 app/pages/*.py）
+------------------------------------------------------------------------------------------------
+  inventory.adjust, inventory.read, order.create, order.read, order.read_own, order.refund, order.update_status, product.read, product.write, restock.create
+
+【4】静态检查项
+------------------------------------------------------------------------------------------------
+检查                                      预期 / 实际                                             结果
+角色集合一致（PERMISSIONS=ROLE_LABELS=SPEC）    clerk, customer, maker, manager, stock / 一致         PASS
+矩阵逐格 == 规范矩阵                            5 角色 × 11 权限点全一致 / 一致                               PASS
+路由接线权限 ⊆ 已知权限                           无未注册权限 / （空）                                        PASS
+未接线权限 == 白名单 {coupon.write}             coupon.write 仅此一项（券维护页留 v2.0） / 符合                  PASS
+
+【5】行为收口（拒绝侧不碰 DB；放行侧 GET 且 DB 可用才跑）
+------------------------------------------------------------------------------------------------
+放行侧状态：DB 可用，已全量跑
+用例                                                预期    实际  结果  端点
+inventory.adjust × clerk（拒绝→403）                 403   403  PASS  POST /inventory/adjust
+inventory.adjust × customer（拒绝→403）              403   403  PASS  POST /inventory/adjust
+inventory.adjust × maker（拒绝→403）                 403   403  PASS  POST /inventory/adjust
+inventory.adjust × manager（拒绝→403）               403   403  PASS  POST /inventory/adjust
+inventory.read × clerk（放行→200）                   200   200  PASS  GET /inventory/
+inventory.read × customer（拒绝→403）                403   403  PASS  GET /inventory/
+inventory.read × maker（拒绝→403）                   403   403  PASS  GET /inventory/
+inventory.read × manager（放行→200）                 200   200  PASS  GET /inventory/
+inventory.read × stock（放行→200）                   200   200  PASS  GET /inventory/
+order.create × clerk（放行→200）                     200   200  PASS  GET /orders/new
+order.create × customer（放行→200）                  200   200  PASS  GET /orders/new
+order.create × maker（拒绝→403）                     403   403  PASS  GET /orders/new
+order.create × manager（拒绝→403）                   403   403  PASS  GET /orders/new
+order.create × stock（拒绝→403）                     403   403  PASS  GET /orders/new
+order.read × clerk（放行→200）                       200   200  PASS  GET /orders/
+order.read × customer（拒绝→403）                    403   403  PASS  GET /orders/
+order.read × maker（放行→200）                       200   200  PASS  GET /orders/
+order.read × manager（放行→200）                     200   200  PASS  GET /orders/
+order.read × stock（拒绝→403）                       403   403  PASS  GET /orders/
+order.read_own × clerk（放行→200）                   200   200  PASS  GET /orders/mine
+order.read_own × customer（放行→200）                200   200  PASS  GET /orders/mine
+order.read_own × maker（拒绝→403）                   403   403  PASS  GET /orders/mine
+order.read_own × manager（拒绝→403）                 403   403  PASS  GET /orders/mine
+order.read_own × stock（拒绝→403）                   403   403  PASS  GET /orders/mine
+order.refund × clerk（拒绝→403）                     403   403  PASS  POST /orders/1/refund
+order.refund × customer（拒绝→403）                  403   403  PASS  POST /orders/1/refund
+order.refund × maker（拒绝→403）                     403   403  PASS  POST /orders/1/refund
+order.refund × stock（拒绝→403）                     403   403  PASS  POST /orders/1/refund
+order.update_status × clerk（拒绝→403）              403   403  PASS  POST /orders/1/status
+order.update_status × customer（拒绝→403）           403   403  PASS  POST /orders/1/status
+order.update_status × manager（拒绝→403）            403   403  PASS  POST /orders/1/status
+order.update_status × stock（拒绝→403）              403   403  PASS  POST /orders/1/status
+product.read × clerk（放行→200）                     200   200  PASS  GET /products/
+product.read × customer（放行→200）                  200   200  PASS  GET /products/
+product.read × maker（放行→200）                     200   200  PASS  GET /products/
+product.read × manager（放行→200）                   200   200  PASS  GET /products/
+product.read × stock（放行→200）                     200   200  PASS  GET /products/
+product.write × clerk（拒绝→403）                    403   403  PASS  GET /products/new
+product.write × customer（拒绝→403）                 403   403  PASS  GET /products/new
+product.write × maker（拒绝→403）                    403   403  PASS  GET /products/new
+product.write × manager（放行→200）                  200   200  PASS  GET /products/new
+product.write × stock（拒绝→403）                    403   403  PASS  GET /products/new
+restock.create × clerk（拒绝→403）                   403   403  PASS  GET /inventory/restocks
+restock.create × customer（拒绝→403）                403   403  PASS  GET /inventory/restocks
+restock.create × maker（拒绝→403）                   403   403  PASS  GET /inventory/restocks
+restock.create × manager（拒绝→403）                 403   403  PASS  GET /inventory/restocks
+restock.create × stock（放行→200）                   200   200  PASS  GET /inventory/restocks
+
+================================================================================================
+结论：全部通过
+================================================================================================

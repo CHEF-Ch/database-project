@@ -22,6 +22,7 @@
 {% if 'inventory.adjust' in perms %}
 <h2>调整库存</h2>
 <form method="post" action="{{ url_for('inventory.adjust_stock') }}" class="form inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>原料
     <select name="material_id">
       {% for m in all_materials %}

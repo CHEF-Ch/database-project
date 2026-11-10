@@ -86,6 +86,7 @@
 <div class="actions">
   {% if 'pay' in actions %}
   <form method="post" action="{{ url_for('order.pay', order_id=order.order_id) }}" class="form inline bordered">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>支付方式
       <select name="pay_method">
         {% for code, label in pays.items() %}
@@ -103,12 +104,14 @@
   {% if 'cancel' in actions %}
   <form method="post" action="{{ url_for('order.cancel', order_id=order.order_id) }}"
         onsubmit="return confirm('取消后预占库存与券会释放，确定取消？');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn" type="submit">取消订单</button>
   </form>
   {% endif %}
 
   {% if 'to_making' in actions %}
   <form method="post" action="{{ url_for('order.update_status', order_id=order.order_id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="to_status" value="MAKING">
     <button class="btn primary" type="submit">开始制作</button>
   </form>
@@ -116,6 +119,7 @@
 
   {% if 'to_completed' in actions %}
   <form method="post" action="{{ url_for('order.update_status', order_id=order.order_id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="to_status" value="COMPLETED">
     <button class="btn primary" type="submit">完成制作</button>
   </form>
@@ -124,6 +128,7 @@
   {% if 'refund' in actions %}
   <form method="post" action="{{ url_for('order.refund', order_id=order.order_id) }}"
         onsubmit="return confirm('整单退款会冲正积分、退回余额与券，库存不恢复，确定退款？');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn danger" type="submit">整单退款</button>
   </form>
   {% endif %}

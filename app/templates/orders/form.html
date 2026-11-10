@@ -41,6 +41,7 @@
 {% endif %}
 
 <form method="post" action="{{ url_for('order.create_order') }}" id="order-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <h2>选择饮品</h2>
   <table class="table wide order-form">
     <thead>
