@@ -38,6 +38,7 @@
 ├── app/                       # 第七至九周：Web 应用（分层）
 │   ├── pages/                 #   页面层：蓝图/路由，只接参、校验、渲染
 │   ├── services/              #   业务层：认证、权限矩阵、业务规则、事务边界
+│   ├── csrf.py                #   安全：CSRF 同步令牌（POST 表单 + 请求头双通道）
 │   ├── dao/                   #   数据访问层：连接/事务管理、参数化 SQL（唯一碰 SQL Server 的层）
 │   ├── templates/             #   Jinja2 模板
 │   └── static/                #   样式等静态资源
@@ -52,6 +53,7 @@
 │   ├── order_pages_test.py    # ⑤ 订单页面自检：125 项（含 --sql-auth 受限登录轮）
 │   ├── permission_matrix_test.py # ⑥ 权限矩阵：静态收口 4 项 + 行为收口 47 项（拒绝 30 / 放行 17）
 │   ├── integration_test.py    # ⑦ 集成测试：130 条用例按 ID 逐条断言（A–J 十组）
+│   ├── _csrf_client.py        # 测试侧：客户端自动补 CSRF 令牌（make_client / raw_client）
 │   ├── create_test_db.sql     # ⑦ I 组并发沙箱 MilkTeaShop_test（COPY_ONLY 还原，源库只读）
 │   ├── smoke_test.py          # ⑦的雏形：骨架用例 + 错误分类 + 真实启动，可写证据
 │   └── verify_db_logins.py    # ⑦的雏形：5 个业务登录（不含 login_app）的数据库级权限正/反例
@@ -67,8 +69,24 @@
 │   ├── app_login.sql          # 第七至九周：v1.0 上的受限登录 + 顾客角色 + 授权补缺
 │   ├── migration.sql          # 第六周：v0.1 → v1.0 结构迁移（副本上执行）
 │   └── regression.sql         # 第六周：迁移后回归测试
-└── result/                    # 实际运行验证证据（sqlcmd 输出 / 自检输出）
+└── result/                    # 实际运行验证证据（sqlcmd 输出 / 自检输出 / 应用界面截图，索引见 result/README.md）
 ```
+
+## 设计要点速览（第二阶段 v1.0）
+
+> 本节由任务要求点名要写进 README 的五项缩到一页，详细论证在链接的文件里。数字均与 `result/` 里的证据一致。
+
+| 项 | 结论 | 详见 |
+| --- | --- | --- |
+| **ER 模型** | 17 实体 / 20 条业务联系（覆盖 25 条外码）/ 4 处 M:N / 3 个弱实体 / 3 类审计流水；每条联系标两端 `min..max` 基数与「约束 / 代码 / 人工」三档实现方式 | `docs/07-ER模型/`（三人各一份 ER 图 + 映射清单 + v0.1 问题清单） |
+| **函数依赖与范式** | 1NF、2NF 均 **17/17**；3NF/BCNF **16/17**。唯一严格违例：`shop_order` 的 `{item_subtotal, coupon_discount} → total_amount`（派生列经非主属性传递）；其余“冗余”全是写入时点快照或跨表聚合，不是表内 FD 违例 | `docs/08-规范化/依赖与范式分析.md` §1–§2 |
+| **更新异常** | 三类各一例（均用 `02-seed.sql` 真实行）：插入——`item_subtotal=10, total_amount=999` 不报错；修改——`item_subtotal` 34→30 而 `total_amount` 仍 34；删除——删 `PENDING` 单会级联删明细，但 `reserved_qty` 不释放。另 1 处结构缺口 S1：`order_item_addon` 缺 `addon_price` 快照，历史加料金额会随现价漂移 | 同上 §2–§3 |
+| **分解方案** | **0 拆 0 并（17 表全保留）**，判据 R1–R6：只有 FD 冗余才拆、快照不拆、1:1 不拆、拆分必须无损连接且依赖保持、能用约束消除异常就不拆。`shop_order` 保留 + 等式 CHECK P12（`total = subtotal − discount`）消除异常；另补 S1 快照列 | `docs/08-规范化/重构方案.md` §1.2–§5 |
+| **迁移与回归** | 指纹 **219 → 236**（111 列 + 17 主码 + 3 UQ + 4 筛选唯一索引 + 25 外码 + 60 CHECK + 16 DEFAULT）；迁移 = **+1 列 + 15 CHECK + 1 筛选唯一索引**，只回填 3 行 `addon_price`、行数不变；`regression.sql` 六段核对全过，v0.1 源库保持 219 不动 | `sql/migration.sql`、`sql/regression.sql`、`result/第6周-*` |
+
+应用侧（四层结构、两条调用链、三层权限矩阵、错误码表）见
+[`docs/09-应用开发/结构与运行.md`](docs/09-应用开发/结构与运行.md)，逐角色操作步骤见
+[`docs/09-应用开发/操作手册.md`](docs/09-应用开发/操作手册.md)。
 
 ## 环境与复现
 
@@ -78,17 +96,37 @@
 
 复现步骤（从空库开始）：
 
-```powershell
-# 实例名按实际环境修改
-sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/00-create.sql
-sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/01-schema.sql
-# ……按需执行 constraint / seed / view / role / crud / query
+**(1) 建库链：必备，按顺序执行（跳步会报错）**
 
-# 第二阶段 v1.0 迁移复现（第六周）：由 v0.1 源库重建副本 MilkTeaShop_v01，
-# 再在副本上执行迁移与回归（源库不动，详见 sql/README.md）
-sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i scripts/create_v01_copy.sql
-sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/migration.sql
-sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/regression.sql
+```powershell
+# 实例名按实际环境修改；这 6 步已由 ⑦ 的 REPRO-01 实测（在空实例上删库重建，6 步 exit=0，
+# 结果：17 表 / 110 列 / 45 CHECK / 127 行，与 v0.1 基线一致）
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/00-create.sql        # 删库建库
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/01-schema.sql        # 17 张表（列/非空/默认值）
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/constraint.sql       # 主码/候选码/外码/CHECK
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/02-seed.sql          # 样例数据（17 表 127 行）
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/view.sql             # 4 个统计视图
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/role.sql             # v0.1 角色与权限
+```
+
+> 为什么顺序不能换：`constraint.sql` 依赖 `01-schema.sql` 的表，`02-seed.sql` 的数据要能过约束；
+> `view.sql` 依赖三张表都已建好。`01-schema.sql` / `constraint.sql` / `02-seed.sql` / `role.sql` 开头均写死 `SET QUOTED_IDENTIFIER ON`
+> （否则 sqlcmd 下带筛选唯一索引的三张表会报 Msg 1934，而 SSMS 默认 ON，很容易“在 SSMS 里能跑”但按 README 跑不过）。
+
+**(2) 演示脚本：可选，建库链跑完后随时执行**
+
+```powershell
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/crud.sql            # 增删改查（每个写操作 BEGIN TRAN…ROLLBACK，跑完不污染 seed）
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/query.sql           # 多表/统计查询（只读）
+```
+
+**(3) 第二阶段 v1.0 迁移复现（第六周）**：由 v0.1 源库重建副本 `MilkTeaShop_v01`，
+再在副本上执行迁移与回归（**源库不动**，详见 `sql/README.md`）
+
+```powershell
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i scripts/create_v01_copy.sql   # v0.1 → 副本
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/migration.sql            # 指纹 219 → 236
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/regression.sql           # 六段回归
 ```
 
 > `scripts/create_v01_copy.sql` 用实例默认备份/数据目录，换机器不用改；副本已存在会先删除再重建。
@@ -139,6 +177,7 @@ python scripts/integration_test.py --write --concurrency --real-server --repro  
 | 第五周：ER 模型（ER 图、映射清单、问题清单） | `docs/07-ER模型/` |
 | 第六周：范式化与迁移 / 回归 | `docs/08-规范化/`、`sql/migration.sql`、`sql/regression.sql` |
 | 第七至九周：Web 应用（分层、登录、角色权限） | `app/`、`run.py`、`requirements.txt`、`scripts/`、`sql/app_login.sql`、`docs/09-应用开发/`（结构与运行、操作手册、测试用例） |
+| 结果目录（证据与截图） | `result/`（索引：`result/README.md`；界面截图 `result/fig/web-01 … web-15`） |
 | 阶段报告 | `docs/03-阶段报告.md` |
 | AI 使用记录 | `docs/04-AI使用记录/`（按成员分子目录） |
 | 组内分工表 | `docs/05-组内分工.md` |
