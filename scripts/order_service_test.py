@@ -26,7 +26,7 @@ from app.dao.connection import connect
 import app.services.order_service as svc
 from app.errors import AppError
 
-# 种子券 CP000001 的有效期是 2026-09-01—2026-10-31；固定 today，避免用例随时间失效。
+# 种子券 CP000001 的有效期是 2026-09-01—2027-12-31；固定 today，避免用例随时间失效。
 FIXED_DAY = date(2026, 10, 25)
 
 

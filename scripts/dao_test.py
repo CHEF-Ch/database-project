@@ -665,9 +665,11 @@ class DaoGuardTests(unittest.TestCase):
                 ),
                 [],
             )
+            # 券规则有效期已延到 2027-12-31（原 2026-10-31）；这里要测的是"过期券不返回"，
+            # 因此取样日期必须落在新的 valid_to 之后。
             self.assertEqual(
                 member.list_usable_coupons(
-                    cur, "C0000002", subtotal=30, today=date(2026, 11, 1)
+                    cur, "C0000002", subtotal=30, today=date(2028, 1, 1)
                 ),
                 [],
             )

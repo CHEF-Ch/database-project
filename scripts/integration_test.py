@@ -2303,7 +2303,7 @@ def group_repro(r: Runner, *, do_repro: bool, real_server: bool) -> None:
     if not do_repro:
         r.rec_ref("REPRO-01", "6 步全 exit=0；重建前后结构计数与 17 表行数一致", "本轮未重跑",
                   "00-create.sql 会删库重建 v0.1，故默认不跑；加 --repro 执行。"
-                  "该链条已在 trusted 版证据中实测通过（6 步全过、结构对象计数与 127 行数据一致）")
+                  "该链条已在 trusted 版证据中实测通过（6 步全过、结构对象计数与 131 行数据一致）")
     else:
         if not SQLCMD.exists():
             r.rec_skip("REPRO-01", "全部 exit=0", "未执行", f"找不到 sqlcmd：{SQLCMD}")
@@ -2381,7 +2381,7 @@ def group_repro(r: Runner, *, do_repro: bool, real_server: bool) -> None:
                       fingerprint == 236 and snap["rows"]["shop_order"] == 7
                       and snap["rows"]["order_item"] == 12,
                       "236/7 单/12 明细（沿用第 6 周 04/18 证据）",
-                      f"指纹 {fingerprint}，17 表 {snap['total']} 行（第 6 周口径 127 行）")
+                      f"指纹 {fingerprint}，17 表 {snap['total']} 行（本轮 seed 口径 131 行）")
 
     # REPRO-03 启动 + /health
     proc = None

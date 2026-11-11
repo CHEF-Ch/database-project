@@ -28,19 +28,19 @@ DEMO_USERS: dict[str, dict] = {
     "maker1": {
         "pwd": "scrypt:32768:8:1$2ZeJ9pmegcY2YqTT$b97399eee243bf41319b423b7a67590092c15c37cfcc97aaa013b168683de701b7d0c9f26225bee1cf2269d0489f1d5368a86bd50fcba1a75dd6a3c221029e0f",
         "role": "maker",
-        "display": "制作员-王芳",
+        "display": "制作员-李娜",
         "employee_id": "E0000002",
     },
     "stock1": {
         "pwd": "scrypt:32768:8:1$pg5Ye02EJgr26aGH$9db0d86d3365407a463c3f4148272dc89d4747d0830644463f4db0f68ef3426500d540d7d09be8c0243ccec933324b926f4db0ce1544d9656f8eb8f0f6912007",
         "role": "stock",
-        "display": "库存管理员-赵强",
+        "display": "库存管理员-王强",
         "employee_id": "E0000003",
     },
     "manager1": {
         "pwd": "scrypt:32768:8:1$xKNHKxGAyKagysXA$de94edb43d822ae469c555f942277a23640eca818e0d771defe0810fe1a71ae96ff7c3ca2520e4719092959c9e1da1379140b1edb9fbdf979f5fe5fe6d9404d6",
         "role": "manager",
-        "display": "店长-陈明",
+        "display": "店长-赵敏",
         "employee_id": "E0000004",
     },
 }
