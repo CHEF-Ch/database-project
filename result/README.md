@@ -21,7 +21,7 @@
 | ③ | `第7周-③DAO自检-20261111.txt`（当前口径） | `python scripts/dao_test.py` | 37/37（明细补 product_name、流水补 unit 后重跑） |
 | ③ | `第7周-③DAO角色自检-20261021.txt` | `python scripts/dao_roles_test.py` | 7 条路径 7/7（2026-11-11 复跑仍 7/7） |
 | ④ | `第7周-④订单业务层自检-20261111.txt`（当前口径） | `python scripts/order_service_test.py` | 29/29（顾客不得用现金支付后重跑） |
-| ⑤ | `第7周-⑤订单页面自检-20261111.txt` + `…-20261111-sql认证.txt`（当前口径） | `python scripts/order_pages_test.py [--sql-auth] --write` | **141/141 × 2**（顾客现金拦截 3 + 同款多行 7 + 订单数基线 1 + 失败原因可读 2 + 无操作说明 3） |
+| ⑤ | `第7周-⑤订单页面自检-20261111.txt` + `…-20261111-sql认证.txt`（当前口径） | `python scripts/order_pages_test.py [--sql-auth] --write` | **147/147 × 2**（顾客现金拦截 3 + 同款多行 7 + 订单数基线 1 + 失败原因可读 2 + 无操作说明 3 + 顾客菜单合并 6） |
 | ⑥ | `第7周-⑥权限矩阵自检-20261111.txt` + `…-20261111-sql认证.txt`（当前口径） | `python scripts/permission_matrix_test.py --write [--sql-auth]` | 静态 4 + 行为 **52**（拒 33 / 放 19，新增 `inventory.logs.read`）；sql 轮曾抓到“最近流水”区块越权，已修 |
 | ⑦ | `第8周-⑦集成测试-20261111.txt`（**当前口径**，trusted） | `python scripts/integration_test.py --write --concurrency --real-server --repro` | **132 项 / PASS 128 / FAIL 0 / SKIP 4 / REF 0**（全量重跑，含 REPRO-01 真重建；新增 INV-19/20 报损用例） |
 | ⑦ | `第8周-⑦集成测试-20261104.txt`（历史） | 同上（11-04 末带 `--repro`） | 130 项 / PASS 126 / FAIL 0 / SKIP 4 |
@@ -32,7 +32,7 @@
 > **2026-11-11 前端/服务层收口后全量重跑（trusted + sql）**：改动面涉及 DAO（明细补 `product_name`、
 > 流水补 `m.unit`）、服务层（顾客不得用现金支付）、页面层（分页、表单回填、登录页内提示、退出改 POST、
 > 错误页去重）与全部模板。按“改了就重跑”的口径把 8 个脚本全部重跑并落盘，结果：①② 全过、① 17/17、
-> ③ 37/37、③角色 7/7、④ 29/29、⑤ **141/141 × 2**、⑥ 静态 4 + 行为 52 × 2、⑦ trusted 132（PASS 128 /
+> ③ 37/37、③角色 7/7、④ 29/29、⑤ **147/147 × 2**、⑥ 静态 4 + 行为 52 × 2、⑦ trusted 132（PASS 128 /
 > SKIP 4 / REF 0，含 `--repro` 真重建）、⑦ sql PASS 15 / REF 117。
 > 另：`order_pages_test` 新增“同款不同配料可下两行”7 条断言（数据层本就允许，缺的是页面表达力）。
 > 其中 ⑥ 的 sql 轮**抓到一处真回归**：新增的“最近库存流水”区块对店员也查流水，而 `role_cashier` 在

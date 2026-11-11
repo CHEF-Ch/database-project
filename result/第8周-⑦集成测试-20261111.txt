@@ -1,7 +1,7 @@
 ============================================================================================================
 第 7—9 周 ⑦ 集成测试与异常验证：A–J 组逐条执行（对应 docs/09-应用开发/测试用例.md §5）
 ============================================================================================================
-生成时间：2026-11-11 23:25:15
+生成时间：2026-11-11 23:37:11
 Python 3.13.12　DB_AUTH=trusted　DB_NAME=MilkTeaShop_v01
 执行方式：A–H 组＝Flask 测试客户端 + 外层事务 + SAVEPOINT（整轮回滚，seed 不变）；I 组＝沙箱 MilkTeaShop_test 真提交
 可选开关：--concurrency=是　--real-server=是　--repro=是
@@ -107,7 +107,7 @@ ORD-22        CANCELLED/预占释放/不写库存流水/积分不变    302 预�
 ORD-23        409 E4001/状态不变                409 PAID                                PASS  
 ORD-24        REFUNDED/退款额=应付/库存不回补/无新流水    302 状态=REFUNDED 退款额=9.00                PASS  
 ORD-25        409/409                       409/409                                 PASS  
-ORD-26        302/302/COMPLETED/completed_at 已写302/302 状态=COMPLETED completed_at=2026-11-11 23:25:11PASS  
+ORD-26        302/302/COMPLETED/completed_at 已写302/302 状态=COMPLETED completed_at=2026-11-11 23:37:07PASS  
 ORD-27        409/状态不变                      409                                     PASS  
 ORD-28        302（合法过渡发生）/金额不变              202611110015 状态=MAKING 金额 (Decimal('9.00'), Decimal('9.00'), None)→(Decimal('9.00'), Decimal('9.00'), None)PASS  
 ORD-29        403 E2003                     403                                     PASS  
