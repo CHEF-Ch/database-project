@@ -117,7 +117,8 @@ class Harness:
         assert resp.status_code == 302, (username, resp.status_code)
 
     def logout(self) -> None:
-        self.client.get("/logout")
+        # 退出改 POST（带 CSRF 令牌）
+        self.client.post("/logout")
 
     def get(self, path: str, expect: int, note: str = "") -> str:
         resp = self.client.get(path)
@@ -251,6 +252,8 @@ def run_read_cases(h: Harness) -> None:
     h.get("/orders/new", 403, "制作员不能下单")
     body = h.get("/orders/202609160001", 200, "制作员看已完成单")
     h.check_true("已完成单无状态按钮", "开始制作" not in body and "完成制作" not in body)
+    # E1：终态单不能留白，要给"无后续操作"的说明
+    h.check_true("已完成单：给出“无后续操作”的说明", "没有后续操作" in body)
     h.logout()
 
     h.login("stock1")
@@ -268,7 +271,8 @@ def run_read_cases(h: Harness) -> None:
     refund_amount = h.one("SELECT refund_amount FROM dbo.shop_order WHERE order_id = '202609160006'")
     h.check_true(
         "已退款单展示退款额（金额本身，不只是状态徽标）",
-        f"已退 <strong>{_d(refund_amount)}</strong>" in body,
+        # 2026-11-11：汇总行的金额统一带 ¥ 前缀（表格单元格内仍为裸数字）
+        f"已退 <strong>¥{_d(refund_amount)}</strong>" in body,
         str(refund_amount),
     )
     h.logout()
@@ -314,6 +318,11 @@ def run_write_cases(h: Harness) -> None:
     h.check_true("现金单已落库", cash_order is not None, cash_order or "")
     detail_body = h.get(f"/orders/{cash_order}", 200, "下单后的重定向目标可访问")
     h.check_true("详情页展示新单号", cash_order in detail_body)
+    # E1：没有可执行操作时不能留白，要说清"为什么没有、找谁"
+    h.check_true("已支付单（店员）：给出“退款找店长”的说明",
+                 "如需退单，请由店长" in detail_body)
+    h.check_true("详情页有「再下一单」（有 order.create 时）",
+                 "再下一单" in detail_body)
     cash = h.order_row(cash_order)
     h.check_true("现金单状态 PAID", cash[1] == "PAID", str(cash[1]))
     h.check_true("现金单金额 = 12.00 + 1.00 加料", _d(cash[6]) == _d("13.00"), str(cash[6]))
@@ -330,6 +339,56 @@ def run_write_cases(h: Harness) -> None:
     )
     h.check_true("现金单加料价快照 1.00", _d(h.one(
         "SELECT addon_price FROM dbo.order_item_addon WHERE order_id = ?", cash_order)) == _d("1.00"))
+
+    # ---- 1b) 同款不同配料：同一商品两行（不同糖度 + 只有一行加料）----
+    # 数据层依据：order_item 主码是 (order_id, item_line)，没有 (order_id, product_id) 唯一约束；
+    # 业务层按 lines 顺序编号 item_line。页面用 ".2/.3" 后缀表达第 2 行起（第 1 行不带后缀）。
+    stock_before_v = h.stock("M0000001")
+    h.post(
+        "/orders/",
+        {
+            "channel": "COUNTER",
+            "order_mode": "COUNTER_CASHIER",
+            "pay_method": "CASH",
+            "qty.P0000001": "2",
+            "sugar.P0000001": "FULL",
+            "ice.P0000001": "REGULAR",
+            "temp.P0000001": "COLD",
+            "qty.P0000001.2": "1",
+            "sugar.P0000001.2": "HALF",
+            "ice.P0000001.2": "LESS",
+            "temp.P0000001.2": "COLD",
+            "addon.P0000001.M0000004.2": "1",
+        },
+        302,
+        "同款两行（不同糖度 + 一行加料）",
+    )
+    variant_order = h.last_order_id()
+    h.check_true("同款两行：单已落库", variant_order is not None, variant_order or "")
+    h.cur.execute(
+        "SELECT item_line, product_id, sugar_level, ice_level, qty FROM dbo.order_item "
+        "WHERE order_id = ? ORDER BY item_line", variant_order)
+    lines = h.cur.fetchall()
+    h.check_true("同款两行：明细恰好 2 行且 product_id 相同",
+                 len(lines) == 2 and lines[0][1] == lines[1][1] == "P0000001", str(lines))
+    h.check_true("同款两行：糖度各自独立（FULL / HALF）",
+                 len(lines) == 2 and lines[0][2] == "FULL" and lines[1][2] == "HALF",
+                 str([r[2] for r in lines]))
+    h.check_true("同款两行：冰量各自独立（REGULAR / LESS）",
+                 len(lines) == 2 and lines[0][3] == "REGULAR" and lines[1][3] == "LESS",
+                 str([r[3] for r in lines]))
+    h.cur.execute(
+        "SELECT item_line, material_id, qty FROM dbo.order_item_addon WHERE order_id = ? "
+        "ORDER BY item_line", variant_order)
+    addon_rows = h.cur.fetchall()
+    h.check_true("同款两行：加料只挂在第 2 行",
+                 len(addon_rows) == 1 and int(addon_rows[0][0]) == 2, str(addon_rows))
+    variant = h.order_row(variant_order)
+    h.check_true("同款两行：应付 = 3 杯 + 1 份加料（3×12.00 + 1×1.00 = 37.00）",
+                 _d(variant[6]) == _d("37.00"), str(variant[6]))
+    h.check_true("同款两行：按 3 杯扣料（现存减 90）",
+                 h.stock("M0000001") == stock_before_v - 90,
+                 f"{stock_before_v} -> {h.stock('M0000001')}")
 
     # ---- 2) 顾客自助单：PENDING + 预占；表单伪造 member_id 不生效 ----
     h.logout()
@@ -374,6 +433,14 @@ def run_write_cases(h: Harness) -> None:
         "顾客伪造平台单 → 403",
     )
     h.check_true("伪造平台单未落库", h.order_count() == before)
+
+    # ---- 3b) 顾客不能用「现金」把自己的单标成已支付（现金 = 收银台当场结清，属店员动作）----
+    h.post(f"/orders/{self_order}/pay", {"pay_method": "CASH"}, 403,
+           "顾客现金支付 → 403 E2003")
+    cash_row = h.order_row(self_order)
+    h.check_true("现金被拒后仍 PENDING", cash_row[1] == "PENDING", str(cash_row[1]))
+    h.check_true("现金被拒后库存未实扣", h.stock("M0000001") == stock_before,
+                 str(h.stock("M0000001")))
 
     # ---- 4) 顾客支付自己的 PENDING 单（线上流水号必填） ----
     points_before_pay = int(h.one("SELECT points FROM dbo.member_member WHERE member_id = 'C0000001'"))
@@ -472,6 +539,9 @@ def run_write_cases(h: Harness) -> None:
         h.check_true("库存不足未改动现存", h.stock("M0000003") == reserved_m3, str(h.stock("M0000003")))
         # 方案 A：表单错误在页面层就地回填重渲染（WTForms/Rails 做法），不丢用户输入
         h.check_true("失败页有回填提示条", "下单未完成" in body and "E4001" in body)
+        # 文案可读性（D1）：横幅要说出**哪款原料不足**，且不带库存数量
+        h.check_true("失败原因写明缺哪款原料（茶叶）", "茶叶" in body, body[:0])
+        h.check_true("失败原因不泄露库存数量", "可售量不足" in body and "1000" not in body.split("下单未完成")[1][:200])
         h.check_true("回填杯数 2", 'name="qty.P0000001"' in body and 'value="2"' in body)
         h.check_true("回填糖度 HALF", 'value="HALF" selected' in body)
         h.check_true("回填冰量/温度", 'value="LESS" selected' in body and 'value="HOT" selected' in body)
@@ -571,10 +641,10 @@ def run_write_cases(h: Harness) -> None:
     h.post("/orders/202609160005/cancel", {}, 409, "重复取消 E4001")
     h.logout()
 
-    # ---- 12) 全量回滚前的账：订单数 = 基线 + 本轮新增 4 ----
+    # ---- 12) 全量回滚前的账：订单数 = 基线 + 本轮新增 5 ----
     h.check_true(
-        "订单数 = 基线 + 新增 4（现金 / 自助 / 平台 / 加料注入单）",
-        h.order_count() == base_orders + 4,
+        "订单数 = 基线 + 新增 5（现金 / 同款两行 / 自助 / 平台 / 加料注入单）",
+        h.order_count() == base_orders + 5,
         f"{base_orders} → {h.order_count()}",
     )
 

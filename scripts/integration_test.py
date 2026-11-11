@@ -90,6 +90,10 @@ SQLCMD = _find_sqlcmd()
 # 泄露自检：错误页/正常页都不该出现的实现细节
 LEAK_TOKENS = ("SELECT ", "INSERT INTO", "dbo.", "pyodbc", "SQLEXPRESS", "Traceback", "ODBC Driver")
 
+# 页面展示用：订单明细的杯型已按 docs/02-数据字典.md 的术语中文化
+# （模板 app/templates/_display.html: SIZE_LABELS；改这里就同时确认了页面文案）
+SIZE_LABELS = {"SMALL": "小杯", "MEDIUM": "中杯", "LARGE": "大杯"}
+
 
 def leaks(body: str) -> bool:
     return any(token in body for token in LEAK_TOKENS)
@@ -110,7 +114,7 @@ CASES: dict[str, tuple[str, str]] = {
     "AUTH-03": ("P0", "密码错误：401 E2002，不建 session，不泄露用户是否存在"),
     "AUTH-04": ("P0", "缺用户名或密码：400 E1001"),
     "AUTH-05": ("P0", "用户名 31 字 / 密码 129 字：400 E1001"),
-    "AUTH-06": ("P0", "退出后访问受保护页：401 E2001"),
+    "AUTH-06": ("P0", "POST 退出（GET 退出已禁用→405）后访问受保护页：401 E2001"),
     "AUTH-07": ("P0", "未登录访问商品/库存/订单：均 401 E2001"),
     "AUTH-08": ("P1", "不退出直接换账号：旧 session 清空，无残留 member_id"),
     "AUTH-09": ("P1", "篡改 session cookie 的 role：签名校验失败，不提权"),
@@ -163,6 +167,8 @@ CASES: dict[str, tuple[str, str]] = {
     "INV-13": ("P1", "验收不存在的补货单：404 E3001"),
     "INV-14": ("P1", "调整不存在的原料：404 E3001"),
     "INV-15": ("P2", "调整数量非数字/极大值：4xx，不写库、不 500"),
+    "INV-19": ("P1", "报损登记：类型=LOSS + 绝对数量 → 写 LOSS 流水且库存减少（绝对值被规范成负向）"),
+    "INV-20": ("P1", "类型=GAIN + 绝对数量 → 只增不减（方向由类型决定，数量不参与定向）"),
     # E. 订单与事务
     "ORD-01": ("P0", "店员 GET /orders/：200，7 张基线订单可见、分页正常"),
     "ORD-02": ("P0", "制作员 GET /orders/：200（制作队列）"),
@@ -205,7 +211,7 @@ CASES: dict[str, tuple[str, str]] = {
     "QRY-05": ("P2", "分页边界（0/负数/超大）：4xx 或 200，不 500、不返回全表"),
     "QRY-06": ("P2", "查询参数注入 ' OR 1=1 --、%/_：200，参数化生效"),
     # G. 异常与安全
-    "ERR-01": ("P1", "未知路径：404 E3001，错误页含 request_id、无堆栈"),
+    "ERR-01": ("P1", "未知路径：404 E3001，错误页（页脚）含 request_id、无堆栈"),
     "ERR-02": ("P1", "对 GET 路由发 POST：405 E3002"),
     "ERR-03": ("P0", "配置不存在的库：/health 503 E5001，不泄露库名/驱动/服务器"),
     "ERR-04": ("P1", "唯一键冲突：409 E5002（2627 不被误判为 403）"),
@@ -346,7 +352,8 @@ class Runner:
         assert resp.status_code == 302, (username, resp.status_code)
 
     def logout(self) -> None:
-        self.client.get("/logout")
+        # 2026-11-11：退出改为 POST（带 CSRF 令牌），GET /logout 现在返回 405
+        self.client.post("/logout")
 
     def get(self, path: str):
         return self.client.get(path)
@@ -572,10 +579,14 @@ def group_auth(r: Runner) -> None:
 
     # AUTH-06 退出后访问受保护页
     r.login("clerk1")
-    out = r.get("/logout")
+    out = r.post("/logout")
+    get_logout = r.get("/logout")          # 改 POST 后，GET 退出应被方法检查挡下
     after = r.get("/products/")
-    r.check_truth("AUTH-06", out.status_code == 302 and after.status_code == 401,
-                  "302 后 401", f"logout={out.status_code} 之后={after.status_code}")
+    r.check_truth("AUTH-06",
+                  out.status_code == 302 and get_logout.status_code == 405
+                  and after.status_code == 401,
+                  "302 后 401（GET /logout → 405）",
+                  f"logout={out.status_code} GET={get_logout.status_code} 之后={after.status_code}")
 
     # AUTH-07 未登录访问三个受保护页
     codes = [r.get(p).status_code for p in ("/products/", "/inventory/", "/orders/")]
@@ -613,7 +624,8 @@ def group_auth(r: Runner) -> None:
 
     # AUTH-10 对 GET-only 路由发 POST
     r.as_user("clerk1")
-    r.check("AUTH-10", "405", str(r.post("/logout").status_code))
+    # 退出已改 POST，改用一个 GET-only 页面路由验证"方法不匹配 → 405"
+    r.check("AUTH-10", "405", str(r.post("/inventory/logs").status_code))
     r.logout()
 
 
@@ -887,6 +899,32 @@ def group_inventory(r: Runner) -> None:
                   resp.status_code == 302 and new_stock == before - 5 and log_row
                   and log_row[-1][0] == "SHORT" and _d(log_row[-1][1]) == _d("5"),
                   "302/stock-5/SHORT 5", f"{before}→{new_stock} 流水={log_row}")
+
+    # INV-19 报损登记（新增：类型=LOSS + 绝对数量）
+    # 页面口径：类型决定方向、数量填绝对值；路由把"类型 + 绝对值"换成带符号 delta。
+    before = r.stock("M0000001")
+    log_before = r.max_log_id()
+    resp = r.post("/inventory/adjust",
+                  {"material_id": "M0000001", "log_type": "LOSS", "delta": "3.5"})
+    new_stock = r.stock("M0000001")
+    log_row = r.all("SELECT log_type, qty FROM dbo.inv_stock_log "
+                    "WHERE stock_log_id > ? ORDER BY stock_log_id", log_before)
+    r.check_truth("INV-19",
+                  resp.status_code == 302 and new_stock == before - _d("3.5") and log_row
+                  and log_row[-1][0] == "LOSS" and _d(log_row[-1][1]) == _d("3.5"),
+                  "302/stock-3.5/LOSS 3.5（绝对值被规范成负向）",
+                  f"{before}→{new_stock} 流水={log_row}")
+
+    # INV-20 类型=GAIN + 绝对数量 → 只增不减（方向由类型决定，数量不参与定向）
+    before = r.stock("M0000001")
+    log_before = r.max_log_id()
+    resp = r.post("/inventory/adjust",
+                  {"material_id": "M0000001", "log_type": "GAIN", "delta": "2"})
+    r.check_truth("INV-20",
+                  resp.status_code == 302 and r.stock("M0000001") == before + 2
+                  and r.all("SELECT log_type FROM dbo.inv_stock_log "
+                            "WHERE stock_log_id > ?", log_before)[-1][0] == "GAIN",
+                  "GAIN +2 只增不减", f"{before}→{r.stock('M0000001')}")
 
     # INV-06 库存为 0 时调 -1
     target = r.one("SELECT TOP 1 material_id FROM dbo.item_material WHERE reserved_qty = 0 ORDER BY material_id")
@@ -1489,13 +1527,17 @@ def group_query(r: Runner) -> None:
         "WHERE a.order_id = ?", target)]
     sale_logs = r.all("SELECT stock_log_id, material_id, qty FROM dbo.inv_stock_log "
                       "WHERE order_id = ? AND log_type = 'SALE' ORDER BY stock_log_id", target)
+    # QRY-01 断言口径（2026-11-11 调整）：明细的杯型已按 docs/02 术语中文化，
+    # 页面不再出现 MEDIUM/LARGE 原文——改为断言「商品号 + 对应中文杯型」都渲染出来。
+    # 明细是**下单快照**（order_item.size），所以这里查的是 order_item 而不是 item_product。
     r.check_truth("QRY-01",
                   resp.status_code == 200 and target in body
-                  and all(pid in body and size in body for pid, size, _qty in items)
+                  and all(pid in body for pid, _size, _qty in items)
+                  and all(SIZE_LABELS.get(size, size) in body for _pid, size, _qty in items)
                   and all(n in body for n in addon_names if n)
                   and "本单库存流水（店长可见）" in body
                   and all(str(x[0]) in body for x in sale_logs),
-                  "详情页渲染订单头+明细(商品号/杯型)+加料+库存流水",
+                  "详情页渲染订单头+明细(商品号/中文杯型)+加料+库存流水",
                   f"{target} 明细 {len(items)} 行、加料 {len(addon_names)}、SALE 流水 {len(sale_logs)} 行")
 
     # QRY-02 销量统计：与**独立汇总**（order_item × 视图同口径状态）逐商品比对，而不是拿视图比自己
@@ -1570,11 +1612,12 @@ def group_error(r: Runner) -> None:
 
     # ERR-01 未知路径
     body = r.check_in("ERR-01", [404], r.get("/nope"), "GET /nope")
+    # 2026-11-11：错误页正文的 rid 与页脚重复，已去重；rid 统一由页脚的 #request-id 承载
+    rid_hit = re.search(r'id="request-id">([0-9a-f]{8,})<', body)
     r.check_truth("ERR-01",
-                  "E3001" in body and re.search(r"请求标识：<code>[0-9a-f]{8,}</code>", body) is not None
-                  and "Traceback" not in body,
+                  "E3001" in body and rid_hit is not None and "Traceback" not in body,
                   "404 E3001/含 request_id/无堆栈",
-                  f"rid={'有' if re.search(r'请求标识：<code>[0-9a-f]{8,}</code>', body) else '无'}")
+                  f"rid={'有' if rid_hit else '无'}")
 
     # ERR-02 GET 路由收到 POST
     r.check("ERR-02", "405", str(r.post("/health").status_code))

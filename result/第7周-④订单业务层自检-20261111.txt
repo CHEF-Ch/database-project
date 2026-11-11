@@ -1,0 +1,45 @@
+================================================================================
+第 7 周 步骤 ④ 订单业务层自检证据（2026-11-11，最终稿）
+================================================================================
+命令：python scripts/order_service_test.py
+说明：④ 订单业务层 29 项用例；所有写操作在事务内执行并在退出时回滚，业务行数不变。
+本版为 2026-11-11 前端/服务层收口最终稿：pay_order 增“顾客不得用现金支付”；券门槛/下架/加料/订单状态等业务错误补用户可见文案。
+================================================================================
+test_addon_must_be_addon_kind (__main__.OrderServiceTest.test_addon_must_be_addon_kind) ... ok
+test_balance_insufficient (__main__.OrderServiceTest.test_balance_insufficient) ... ok
+test_balance_payment_no_points (__main__.OrderServiceTest.test_balance_payment_no_points) ... ok
+test_cancel_after_recipe_changed_reports_business_rule (__main__.OrderServiceTest.test_cancel_after_recipe_changed_reports_business_rule)
+P1-2 �ع飺���䷽����Ԥռ����ʱ��ȡ��Ӧ�� E4001��ҵ�����+ ���ж���ʾ�� ... ok
+test_cancel_pending_releases_stock_and_returns_coupon (__main__.OrderServiceTest.test_cancel_pending_releases_stock_and_returns_coupon) ... ok
+test_cash_member_coupon_used_and_points_earned (__main__.OrderServiceTest.test_cash_member_coupon_used_and_points_earned) ... ok
+test_cash_order_is_paid_and_deducts_stock (__main__.OrderServiceTest.test_cash_order_is_paid_and_deducts_stock) ... ok
+test_coupon_not_owned (__main__.OrderServiceTest.test_coupon_not_owned) ... ok
+test_coupon_threshold_not_met (__main__.OrderServiceTest.test_coupon_threshold_not_met) ... ok
+test_customer_cannot_pay_other_member_order (__main__.OrderServiceTest.test_customer_cannot_pay_other_member_order) ... ok
+test_customer_cannot_platform (__main__.OrderServiceTest.test_customer_cannot_platform) ... ok
+test_customer_detail_row_isolation (__main__.OrderServiceTest.test_customer_detail_row_isolation) ... ok
+test_insufficient_stock_leaves_no_reservation (__main__.OrderServiceTest.test_insufficient_stock_leaves_no_reservation) ... ok
+test_invalid_qty (__main__.OrderServiceTest.test_invalid_qty) ... ok
+test_lists_and_detail_scopes (__main__.OrderServiceTest.test_lists_and_detail_scopes) ... ok
+test_manager_cannot_create_order (__main__.OrderServiceTest.test_manager_cannot_create_order)
+P2-3 �ع飺``docs/01`` �ѡ�����̨��¼���������Ա���곤ְ����ά�����˿ ... ok
+test_multi_line_order_ids_and_amounts (__main__.OrderServiceTest.test_multi_line_order_ids_and_amounts) ... ok
+test_pay_after_recipe_changed_reports_business_rule (__main__.OrderServiceTest.test_pay_after_recipe_changed_reports_business_rule)
+P1-2 �ع飺���䷽��֧������Ԥռ��ͬ���� E4001 ����ʾ�䷽�����ѱ���� ... ok
+test_pay_is_idempotent_with_same_txn (__main__.OrderServiceTest.test_pay_is_idempotent_with_same_txn) ... ok
+test_pay_txn_conflict_with_other_order (__main__.OrderServiceTest.test_pay_txn_conflict_with_other_order) ... ok
+test_platform_order_paid_without_reservation (__main__.OrderServiceTest.test_platform_order_paid_without_reservation) ... ok
+test_platform_zero_commission_rate (__main__.OrderServiceTest.test_platform_zero_commission_rate) ... ok
+test_refund_balance_returns_balance (__main__.OrderServiceTest.test_refund_balance_returns_balance) ... ok
+test_refund_online_reverses_points (__main__.OrderServiceTest.test_refund_online_reverses_points) ... ok
+test_refund_returns_coupon_and_reverses_points (__main__.OrderServiceTest.test_refund_returns_coupon_and_reverses_points) ... ok
+test_returned_coupon_can_be_used_again (__main__.OrderServiceTest.test_returned_coupon_can_be_used_again)
+P1-1 �ع飺ȡ�����˻ص�ȯ����ص� UNUSED������������ͬһ��Ա���¶����ϡ� ... ok
+test_self_order_pending_reserves_then_pay (__main__.OrderServiceTest.test_self_order_pending_reserves_then_pay) ... ok
+test_update_status_invalid_pending_to_completed (__main__.OrderServiceTest.test_update_status_invalid_pending_to_completed) ... ok
+test_update_status_paid_making_completed (__main__.OrderServiceTest.test_update_status_paid_making_completed) ... ok
+
+----------------------------------------------------------------------
+Ran 29 tests in 0.935s
+
+OK

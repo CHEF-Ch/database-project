@@ -47,9 +47,12 @@ SPEC: dict[str, set[str]] = {
     },
     "customer": {"product.read", "order.create", "order.read_own"},
     "maker": {"product.read", "order.read", "order.update_status"},
-    "stock": {"product.read", "inventory.read", "inventory.adjust", "restock.create"},
+    "stock": {
+        "product.read", "inventory.read", "inventory.logs.read",
+        "inventory.adjust", "restock.create",
+    },
     "manager": {
-        "product.read", "product.write", "inventory.read",
+        "product.read", "product.write", "inventory.read", "inventory.logs.read",
         "order.read", "order.refund", "coupon.write",
     },
 }
@@ -74,6 +77,7 @@ REPRESENTATIVE: dict[str, tuple[str, str] | None] = {
     "product.read": ("GET", "/products/"),
     "product.write": ("GET", "/products/new"),
     "inventory.read": ("GET", "/inventory/"),
+    "inventory.logs.read": ("GET", "/inventory/logs"),
     "inventory.adjust": ("POST", "/inventory/adjust"),
     "restock.create": ("GET", "/inventory/restocks"),
     "order.read": ("GET", "/orders/"),
