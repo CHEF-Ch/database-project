@@ -1,9 +1,13 @@
 {% extends "base.html" %}
+{% import "_display.html" as D %}
 {% block title %}新建订单 · MilkTeaShop{% endblock %}
 
 {% block content %}
 <h1>新建订单</h1>
-
+<p class="crumb">
+  {% if 'order.read' in perms %}<a href="{{ url_for('order.list_orders') }}">← 返回订单列表</a>
+  {% elif 'order.read_own' in perms %}<a href="{{ url_for('order.my_orders') }}">← 返回我的订单</a>{% endif %}
+</p>
 {% if error %}
 <div class="banner error" role="alert">
   <p><strong>下单未完成：</strong>{{ error.message }}<span class="note">（错误码 <code>{{ error.code }}</code>）</span></p>
@@ -43,66 +47,94 @@
 <form method="post" action="{{ url_for('order.create_order') }}" id="order-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <h2>选择饮品</h2>
+  <div class="table-wrap">
   <table class="table wide order-form">
     <thead>
-      <tr><th>商品</th><th>单价</th><th>杯数</th><th>糖度</th><th>冰量</th><th>温度</th><th>加料（份数）</th></tr>
+      <tr><th scope="col">商品</th><th scope="col">单价</th><th scope="col">杯数</th><th scope="col">糖度</th><th scope="col">冰量</th><th scope="col">温度</th><th scope="col">加料（份数）</th></tr>
     </thead>
     <tbody>
+      {# 每个商品最多 6 行（与 order_routes.MAX_VARIANT_ROWS 一致）：
+         第 1 行字段名不带后缀，第 2 行起 ``.2``/``.3``…
+         提交失败时**逐行回填**（含第 2 行起），否则页面说"已保留填写内容"却只留第 1 行。 #}
       {% for p in products %}
-      {# 回填：提交失败时从 request.form 取回用户刚才填的值；首次进入（form 为空）用默认值 #}
-      {% set v_qty = (form.get('qty.' ~ p.product_id, '0') if form else '0') or '0' %}
-      {% set v_sugar = (form.get('sugar.' ~ p.product_id, 'FULL') if form else 'FULL') or 'FULL' %}
-      {% set v_ice = (form.get('ice.' ~ p.product_id, 'REGULAR') if form else 'REGULAR') or 'REGULAR' %}
-      {% set v_temp = (form.get('temp.' ~ p.product_id, 'COLD') if form else 'COLD') or 'COLD' %}
-      <tr>
-        <td><code>{{ p.product_id }}</code> {{ p.name }} <span class="note">{{ p.size }}</span></td>
-        <td>{{ p.unit_price }}</td>
-        <td>
-          <input class="qty" type="number" name="qty.{{ p.product_id }}"
-                 min="0" max="99" step="1" value="{{ v_qty }}" data-price="{{ p.unit_price }}"
-                 aria-label="{{ p.name }} {{ p.size }} 杯数">
-        </td>
-        <td>
-          <select name="sugar.{{ p.product_id }}">
-            {% for code, label in sugars.items() %}
-              <option value="{{ code }}" {% if code == v_sugar %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </td>
-        <td>
-          <select name="ice.{{ p.product_id }}">
-            {% for code, label in ices.items() %}
-              <option value="{{ code }}" {% if code == v_ice %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </td>
-        <td>
-          <select name="temp.{{ p.product_id }}">
-            {% for code, label in temps.items() %}
-              <option value="{{ code }}" {% if code == v_temp %}selected{% endif %}>{{ label }}</option>
-            {% endfor %}
-          </select>
-        </td>
-        <td>
-          {% for a in p.addons %}
-            {% set v_addon = (form.get('addon.' ~ p.product_id ~ '.' ~ a.material_id, '0') if form else '0') or '0' %}
-            <label class="check">
-              <input class="addon" type="number" name="addon.{{ p.product_id }}.{{ a.material_id }}"
-                     min="0" max="99" step="1" value="{{ v_addon }}" data-price="{{ a.addon_price }}"
-                     aria-label="{{ p.name }} 加{{ a.material_name }}份数">
-              {{ a.material_name }} +¥{{ a.addon_price }}
-            </label>
-          {% else %}
-            <span class="note">无</span>
-          {% endfor %}
-        </td>
-      </tr>
+        {% for n in range(1, 7) %}
+          {% set sfx = '' if n == 1 else '.' ~ n %}
+          {% set raw_qty = form.get('qty.' ~ p.product_id ~ sfx) if form else None %}
+          {% if n == 1 or raw_qty %}
+          {% set v_qty = raw_qty or ('0' if n == 1 else '') %}
+          {% set v_sugar = (form.get('sugar.' ~ p.product_id ~ sfx, 'FULL') if form else 'FULL') or 'FULL' %}
+          {% set v_ice = (form.get('ice.' ~ p.product_id ~ sfx, 'REGULAR') if form else 'REGULAR') or 'REGULAR' %}
+          {% set v_temp = (form.get('temp.' ~ p.product_id ~ sfx, 'COLD') if form else 'COLD') or 'COLD' %}
+          <tr class="product-row" data-pid="{{ p.product_id }}">
+            <td>
+              <code>{{ p.product_id }}</code> {{ p.name }} <span class="note">{{ D.SIZE_LABELS.get(p.size, p.size) }}</span>
+              <span class="variant-label">{% if n > 1 %}（同款第 {{ n }} 行）{% endif %}</span>
+              <div class="variant-actions">
+                {# 只有第 1 行给"加行"按钮，避免克隆出成排的按钮 #}
+                {% if n == 1 %}
+                <button type="button" class="btn tiny js-add-variant"
+                        data-pid="{{ p.product_id }}">＋ 同款再加一行</button>
+                {% endif %}
+                <button type="button" class="btn tiny js-remove-variant"{% if n == 1 %} hidden{% endif %}>删除本行</button>
+              </div>
+            </td>
+            <td>{{ p.unit_price }}</td>
+            <td>
+              <input class="qty" type="number" name="qty.{{ p.product_id }}{{ sfx }}"
+                     min="0" max="99" step="1" value="{{ v_qty }}" data-price="{{ p.unit_price }}"
+                     aria-label="{{ p.name }} {{ D.SIZE_LABELS.get(p.size, p.size) }}{% if n > 1 %}第 {{ n }} 行{% endif %} 杯数">
+            </td>
+            <td>
+              <select name="sugar.{{ p.product_id }}{{ sfx }}"
+                      aria-label="{{ p.name }}{% if n > 1 %}第 {{ n }} 行{% endif %} 糖度">
+                {% for code, label in sugars.items() %}
+                  <option value="{{ code }}" {% if code == v_sugar %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td>
+              <select name="ice.{{ p.product_id }}{{ sfx }}"
+                      aria-label="{{ p.name }}{% if n > 1 %}第 {{ n }} 行{% endif %} 冰量">
+                {% for code, label in ices.items() %}
+                  <option value="{{ code }}" {% if code == v_ice %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td>
+              <select name="temp.{{ p.product_id }}{{ sfx }}"
+                      aria-label="{{ p.name }}{% if n > 1 %}第 {{ n }} 行{% endif %} 温度">
+                {% for code, label in temps.items() %}
+                  <option value="{{ code }}" {% if code == v_temp %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td>
+              {% for a in p.addons %}
+                {% set v_addon = (form.get('addon.' ~ p.product_id ~ '.' ~ a.material_id ~ sfx, '0') if form else '0') or '0' %}
+                <label class="check">
+                  <input class="addon" type="number" name="addon.{{ p.product_id }}.{{ a.material_id }}{{ sfx }}"
+                         min="0" max="99" step="1" value="{{ v_addon }}" data-price="{{ a.addon_price }}"
+                         aria-label="{{ p.name }}{% if n > 1 %}第 {{ n }} 行{% endif %} 加{{ a.material_name }}份数">
+                  {{ a.material_name }} +¥{{ a.addon_price }}
+                </label>
+              {% else %}
+                <span class="note">无</span>
+              {% endfor %}
+            </td>
+          </tr>
+          {% endif %}
+        {% endfor %}
       {% else %}
       <tr><td colspan="7" class="note">当前没有在售商品，无法下单。</td></tr>
       {% endfor %}
     </tbody>
   </table>
-  <p class="note">杯数填 0 表示不点这一款；加料按“份”单独计价，不随杯数翻倍（与业务层口径一致）。</p>
+  </div>
+  <p class="note">
+    杯数填 0 表示不点这一款；加料按“份”单独计价，不随杯数翻倍（与业务层口径一致）。
+    同款商品要不同糖度/冰量/加料时，点「＋ 同款再加一行」加成两行（每行一个口味组合）；
+    要不同杯型请直接选对应的另一款商品。
+  </p>
 
   <h2>下单信息</h2>
   <div class="form">
@@ -195,11 +227,11 @@
   </div>
 
   <p>
-    券前预估合计：<strong id="preview" aria-live="polite">0.00</strong> 元
+    券前预估合计：¥<strong id="preview" aria-live="polite">0.00</strong>
     <span id="preview-discount" class="note"></span>
     <span class="note">（仅填写参考；服务端按主数据重算，客户端金额一律不采信）</span>
   </p>
-  <button class="btn primary" type="submit">提交订单</button>
+  <button class="btn primary" type="submit" id="order-submit">提交订单</button>
 </form>
 
 <p>
@@ -257,7 +289,7 @@
       var current = coupon.options[coupon.selectedIndex];
       var off = current && current.value ? (parseFloat(current.getAttribute('data-discount')) || 0) : 0;
       discountOut.textContent = off > 0
-        ? '－ 券优惠 ' + off.toFixed(2) + ' 元 → 预计应付 ' + Math.max(0, total - off).toFixed(2) + ' 元'
+        ? '－ 券优惠 ¥' + off.toFixed(2) + ' → 预计应付 ¥' + Math.max(0, total - off).toFixed(2)
         : '';
     }
   }
@@ -271,8 +303,98 @@
   update();
 })();
 
-/* 平台单信息只有渠道选“外卖平台”时才需要：仅做视觉提示，不禁用字段，
-   提交时到底用不用由服务端按 channel 判定（顾客本就没有这组字段）。 */
+/* 防双击：提交成功后按钮置灰（真正的幂等在服务端，这一层只挡手滑/网络慢时的重复点击）。 */
+(function () {
+  var form = document.getElementById('order-form');
+  var btn = document.getElementById('order-submit');
+  if (!form || !btn) { return; }
+  form.addEventListener('submit', function () {
+    // 放到下一拍再禁用，避免把表单提交本身拦掉
+    setTimeout(function () {
+      btn.disabled = true;
+      btn.textContent = '提交中…';
+    }, 0);
+  });
+})();
+
+/* 同款再加一行：克隆当前行，把字段名统一加 ".n" 后缀（第 1 行不带后缀，保持与既有接口一致）。
+   克隆后把杯数/加料清零，避免误把同一份数量提交两次。 */
+(function () {
+  var MAX_ROWS = 6;                       // 与后端 order_routes.MAX_VARIANT_ROWS 保持一致
+  var form = document.getElementById('order-form');
+  if (!form) { return; }
+
+  function rowsOf(pid) {
+    return Array.prototype.filter.call(
+      form.querySelectorAll('tr.product-row'),
+      function (tr) { return tr.dataset.pid === pid; }
+    );
+  }
+  function baseName(name) { return name.replace(/\.\d+$/, ''); }   // 只剥我们加的 ".2/.3"
+  /* 行号取"当前最大后缀 + 1"，不能用行数：
+     删掉中间行后行数会与最大后缀脱节，用行数当后缀会生成**重名**字段，
+     而服务端 request.form.get() 只取第一个同名值 → 新加的那一行被静默丢弃。 */
+  function nextIndex(pid) {
+    var max = 0;
+    rowsOf(pid).forEach(function (tr) {
+      var q = tr.querySelector('input.qty');
+      var m = q && q.name.match(/\.(\d+)$/);
+      if (m) { max = Math.max(max, parseInt(m[1], 10)); }
+    });
+    return max + 1;
+  }
+  function refresh(pid) {
+    var rows = rowsOf(pid);
+    rows.forEach(function (tr, i) {
+      var label = tr.querySelector('.variant-label');
+      if (label) { label.textContent = i === 0 ? '' : '（同款第 ' + (i + 1) + ' 行）'; }
+      var rm = tr.querySelector('.js-remove-variant');
+      if (rm) { rm.hidden = i === 0; }
+    });
+    var add = rows[0] ? rows[0].querySelector('.js-add-variant') : null;
+    if (add) { add.disabled = rows.length >= MAX_ROWS; }
+  }
+  form.addEventListener('click', function (ev) {
+    var addBtn = ev.target.closest('.js-add-variant');
+    if (addBtn) {
+      ev.preventDefault();
+      var pid = addBtn.dataset.pid;
+      var rows = rowsOf(pid);
+      if (rows.length >= MAX_ROWS) { return; }
+      var src = rows[rows.length - 1];
+      var clone = src.cloneNode(true);
+      clone.querySelectorAll('.js-add-variant').forEach(function (btn) { btn.remove(); });
+      var idx = nextIndex(pid);
+      clone.querySelectorAll('input[name], select[name]').forEach(function (el) {
+        el.name = baseName(el.name) + '.' + idx;
+        if (el.classList.contains('qty') || el.classList.contains('addon')) { el.value = '0'; }
+        if (el.getAttribute('aria-label')) {
+          el.setAttribute('aria-label', el.getAttribute('aria-label') + '（同款第 ' + idx + ' 行）');
+        }
+      });
+      src.insertAdjacentElement('afterend', clone);
+      refresh(pid);
+      return;
+    }
+    var rmBtn = ev.target.closest('.js-remove-variant');
+    if (rmBtn) {
+      ev.preventDefault();
+      var tr = rmBtn.closest('tr.product-row');
+      if (!tr) { return; }
+      var pid2 = tr.dataset.pid;
+      if (rowsOf(pid2)[0] === tr) { return; }   // 第 1 行不给删（就是这一款本身）
+      tr.remove();
+      refresh(pid2);
+    }
+  });
+  Array.prototype.forEach.call(form.querySelectorAll('tr.product-row'), function (tr) {
+    refresh(tr.dataset.pid);
+  });
+})();
+
+/* 平台单信息只有渠道选“外卖平台”时才需要：仅做视觉提示，并把字段禁用（
+   禁用 = 字段不随表单提交，与「服务端只按 channel 判定用不用」保持一致；
+   关闭 JS 时字段仍可编辑，提交后依旧由服务端按 channel 忽略）。 */
 (function () {
   var channel = document.querySelector('select[name="channel"]');
   var box = document.querySelector('.platform-box');

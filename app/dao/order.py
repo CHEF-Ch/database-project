@@ -344,14 +344,20 @@ def list_orders_by_member(
 
 
 def get_order_items(cur, order_id: str) -> list[dict[str, Any]]:
-    """取订单明细，并把加料明细挂到对应明细行的 ``addons`` 字段。"""
+    """取订单明细，并把加料明细挂到对应明细行的 ``addons`` 字段。
+
+    ``product_name`` 取自 ``item_product`` 的**现值**（不是下单快照）：
+    ``order_item`` 只对 ``size``/``unit_price`` 做快照，名称仅用于展示；
+    金额与杯型仍一律取本行的快照列。
+    """
     cur.execute(
         """
-        SELECT order_id, item_line, product_id, size, sugar_level, ice_level,
-               temp_level, qty, unit_price
-        FROM dbo.order_item
-        WHERE order_id = ?
-        ORDER BY item_line
+        SELECT oi.order_id, oi.item_line, oi.product_id, p.name AS product_name,
+               oi.size, oi.sugar_level, oi.ice_level, oi.temp_level, oi.qty, oi.unit_price
+        FROM dbo.order_item AS oi
+        JOIN dbo.item_product AS p ON p.product_id = oi.product_id
+        WHERE oi.order_id = ?
+        ORDER BY oi.item_line
         """,
         order_id,
     )

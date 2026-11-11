@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_display.html" as D %}
 {% block title %}订单 {{ order.order_id }} · MilkTeaShop{% endblock %}
 
 {% block content %}
@@ -6,35 +7,40 @@
   订单 <code>{{ order.order_id }}</code>
   <span class="badge st-{{ order.order_status|lower }}">{{ statuses.get(order.order_status, order.order_status) }}</span>
 </h1>
-
+<p class="crumb">
+  {% if 'order.read' in perms %}<a href="{{ url_for('order.list_orders') }}">← 返回订单列表</a>
+  {% elif 'order.read_own' in perms %}<a href="{{ url_for('order.my_orders') }}">← 返回我的订单</a>{% endif %}
+</p>
 <div class="panel">
   <p class="kv">渠道：{{ channels.get(order.channel, order.channel) }}
     {% if order.order_mode %}· {{ modes.get(order.order_mode, order.order_mode) }}{% endif %}</p>
   <p class="kv">会员：{% if order.member_id %}<code>{{ order.member_id }}</code>{% else %}<span class="note">非会员</span>{% endif %}
     ｜经办员工：{% if order.employee_id %}<code>{{ order.employee_id }}</code>{% else %}<span class="note">—</span>{% endif %}</p>
-  <p class="kv">创建：{{ order.created_at }}　支付：{{ order.paid_at or '—' }}　完成：{{ order.completed_at or '—' }}</p>
+  <p class="kv">创建：{{ D.dt(order.created_at) }}　支付：{{ D.dt(order.paid_at) }}　完成：{{ D.dt(order.completed_at) }}</p>
   <p class="kv">支付方式：{{ pays.get(order.pay_method, order.pay_method) if order.pay_method else '—' }}
     {% if order.pay_txn_no %}｜流水号：<code>{{ order.pay_txn_no }}</code>{% endif %}</p>
   <p class="kv">
-    券前 <strong>{{ order.item_subtotal }}</strong>
-    － 券优惠 <strong>{{ order.coupon_discount }}</strong>
-    ＝ 应付 <strong>{{ order.total_amount }}</strong>
+    券前 <strong>¥{{ order.item_subtotal }}</strong>
+    － 券优惠 <strong>¥{{ order.coupon_discount }}</strong>
+    ＝ 应付 <strong>¥{{ order.total_amount }}</strong>
     {% if order.refund_amount and order.refund_amount != 0 %}
-      　｜已退 <strong>{{ order.refund_amount }}</strong>（{{ order.refund_at or '—' }}）
+      　｜已退 <strong>¥{{ order.refund_amount }}</strong>（{{ D.dt(order.refund_at) }}）
     {% endif %}
   </p>
 </div>
 
 <h2>明细</h2>
+<div class="table-wrap">
 <table class="table wide">
   <thead>
-    <tr><th>行</th><th>商品</th><th>糖 / 冰 / 温</th><th>单价</th><th>杯数</th><th>小计</th></tr>
+    <tr><th scope="col">行</th><th scope="col">商品</th><th scope="col">糖 / 冰 / 温</th><th scope="col">单价</th><th scope="col">杯数</th><th scope="col">小计</th></tr>
   </thead>
   <tbody>
     {% for it in items %}
     <tr>
       <td>{{ it.item_line }}</td>
-      <td><code>{{ it.product_id }}</code> <span class="note">{{ it.size }}</span></td>
+      <td>{{ it.get('product_name') or '—' }}（{{ D.SIZE_LABELS.get(it.size, it.size) }}）
+        <br><span class="note"><code>{{ it.product_id }}</code></span></td>
       <td>{{ it.sugar_label }} / {{ it.ice_label }} / {{ it.temp_label }}</td>
       <td>{{ it.unit_price }}</td>
       <td>{{ it.qty }}</td>
@@ -54,51 +60,81 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
 <p class="note">单价与加料价取下单时的快照，之后改主数据不影响历史订单。</p>
 
 {% if platform %}
 <h2>平台信息</h2>
 <table class="table">
   <tbody>
-    <tr><th>平台</th><td>{{ platforms.get(platform.platform_name, platform.platform_name) }}</td></tr>
-    <tr><th>平台单号</th><td><code>{{ platform.platform_order_no }}</code></td></tr>
-    <tr><th>配送地址</th><td>{{ platform.delivery_address }}</td></tr>
-    <tr><th>配送费</th><td>{{ platform.delivery_fee }}</td></tr>
-    <tr><th>抽成</th><td>{{ platform.commission_rate }}（{{ platform.commission_amount }}）</td></tr>
+    <tr><th scope="col">平台</th><td>{{ platforms.get(platform.platform_name, platform.platform_name) }}</td></tr>
+    <tr><th scope="col">平台单号</th><td><code>{{ platform.platform_order_no }}</code></td></tr>
+    <tr><th scope="col">配送地址</th><td>{{ platform.delivery_address }}</td></tr>
+    <tr><th scope="col">配送费</th><td>{{ platform.delivery_fee }}</td></tr>
+    <tr><th scope="col">抽成</th><td>{{ platform.commission_rate }}（{{ platform.commission_amount }}）</td></tr>
   </tbody>
 </table>
 {% endif %}
 
 {% if stock_logs %}
 <h2>本单库存流水（店长可见）</h2>
+<div class="table-wrap">
 <table class="table wide">
-  <thead><tr><th>流水号</th><th>原料</th><th>类型</th><th>数量</th><th>时间</th></tr></thead>
+  <thead><tr><th scope="col">流水号</th><th scope="col">原料</th><th scope="col">类型</th><th scope="col">数量</th><th scope="col">时间</th></tr></thead>
   <tbody>
     {% for l in stock_logs %}
-    <tr><td>{{ l.stock_log_id }}</td><td>{{ l.material_name }}</td><td>{{ l.log_type }}</td><td>{{ l.qty }}</td><td>{{ l.created_at }}</td></tr>
+    <tr><td>{{ l.stock_log_id }}</td><td>{{ l.material_name }}</td><td>{{ D.LOG_TYPE_LABELS.get(l.log_type, l.log_type) }}</td><td>{{ D.signed_qty(l.log_type, l.qty, l.unit) }}</td><td>{{ D.dt(l.created_at) }}</td></tr>
     {% endfor %}
   </tbody>
 </table>
+</div>
 {% endif %}
 
 {% if actions %}
 <h2>可执行操作</h2>
 <div class="actions">
   {% if 'pay' in actions %}
-  <form method="post" action="{{ url_for('order.pay', order_id=order.order_id) }}" class="form inline bordered">
+  {# 支付方式不再默认落在“现金”（待支付单的 pay_method 常为 NULL，浏览器会自动选第一项）；
+     首项留空 + required，不让“不选就提交”静默当成现金结清。 #}
+  <form method="post" action="{{ url_for('order.pay', order_id=order.order_id) }}"
+        class="form inline bordered" id="pay-form"
+        data-order="{{ order.order_id }}" data-amount="{{ order.total_amount }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>支付方式
-      <select name="pay_method">
+      <select name="pay_method" required>
+        <option value="">请选择支付方式</option>
         {% for code, label in pays.items() %}
+          {# 现金=收银台当场结清，属店员动作；顾客自助单只给线上/余额（真正的校验在业务层） #}
+          {% if not (is_customer and code == 'CASH') %}
           <option value="{{ code }}" {% if order.pay_method == code %}selected{% endif %}>{{ label }}</option>
+          {% endif %}
         {% endfor %}
       </select>
     </label>
-    <label>支付流水号（线上支付必填，现金/余额可留空）
+    <label>支付流水号{% if is_customer %}（线上支付必填；会员余额可留空）{% else %}（线上支付必填，现金/余额可留空）{% endif %}
       <input name="pay_txn_no" maxlength="50" placeholder="如 ON20261025001">
     </label>
     <button class="btn primary" type="submit">确认支付</button>
   </form>
+  <script>
+  /* 支付 = 改状态 + 核销券 + 扣余额 + 计积分，一次写库且不能撤销。
+     单号/金额走 data-*（属性值是数据，不会被转义问题截断），流水号在提交时从输入框读。 */
+  (function () {
+    var form = document.getElementById('pay-form');
+    if (!form) { return; }
+    form.addEventListener('submit', function (ev) {
+      var sel = form.querySelector('select[name="pay_method"]');
+      var method = sel.options[sel.selectedIndex];
+      var txn = form.querySelector('input[name="pay_txn_no"]');
+      var msg = '确认支付订单 ' + (form.dataset.order || '') + '？\n\n'
+        + '金额：¥' + (form.dataset.amount || '') + '\n'
+        + '支付方式：' + (method ? method.text : '') + '\n'
+        + '流水号：' + ((txn.value || '').trim() || '—') + '\n\n'
+        + '确认后订单变为已支付（核销券、扣余额、计积分），不能撤销。';
+      if (!window.confirm(msg)) { ev.preventDefault(); }
+    });
+  })();
+  </script>
   {% endif %}
 
   {% if 'cancel' in actions %}
@@ -134,9 +170,13 @@
   {% endif %}
 </div>
 <p class="note">按钮按角色与订单状态显隐只是体验控制；真正的校验在业务层（状态机 + 角色），数据库层再按受限登录兜底。</p>
+{% elif action_hint %}
+<h2>可执行操作</h2>
+<p class="banner note">{{ action_hint }}</p>
 {% endif %}
 
-<p>
+<p class="actions">
+  {% if 'order.create' in perms %}<a class="btn primary" href="{{ url_for('order.new_order') }}">再下一单</a>{% endif %}
   {% if 'order.read' in perms %}<a class="btn" href="{{ url_for('order.list_orders') }}">返回订单列表</a>{% endif %}
   {% if 'order.read_own' in perms %}<a class="btn" href="{{ url_for('order.my_orders') }}">我的订单</a>{% endif %}
 </p>

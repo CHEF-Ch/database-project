@@ -1,31 +1,48 @@
 {% extends "base.html" %}
+{% import "_display.html" as D %}
 {% block title %}{% if product %}编辑商品{% else %}新增商品{% endif %} · MilkTeaShop{% endblock %}
 
 {% block content %}
 <h1>{% if product %}编辑商品{% else %}新增商品{% endif %}</h1>
+<p class="crumb"><a href="{{ url_for('product.list_products') }}">← 返回商品列表</a></p>
+{# 回填：提交失败时从 request.form 取回用户刚填的值；首次进入（form 为空）用库里的值/默认值 #}
+{% set v_name = (form.get('name', '') if form else (product.name if product else '')) or '' %}
+{% set v_size = (form.get('size', '') if form else (product.size if product else '')) or 'MEDIUM' %}
+{% set v_price = (form.get('unit_price', '') if form else (product.unit_price if product else '')) or '' %}
+{% set v_status = (form.get('sale_status', '') if form else (product.sale_status if product else '')) or 'ON_SALE' %}
+
+{% if error %}
+<div class="banner error" role="alert">
+  <p><strong>提交未完成：</strong>{{ error.message }}<span class="note">（错误码 <code>{{ error.code }}</code>）</span></p>
+  <p class="note">
+    已保留你刚才填写的内容，可直接修改后重新提交。
+    若反复失败，请把请求标识 <code>{{ g.request_id }}</code> 提供给管理员。
+  </p>
+</div>
+{% endif %}
 
 <form method="post"
       action="{% if product %}{{ url_for('product.update_product', product_id=product.product_id) }}{% else %}{{ url_for('product.create_product') }}{% endif %}"
       class="form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>商品名
-    <input name="name" maxlength="100" required value="{{ product.name if product else '' }}">
+    <input name="name" maxlength="100" required value="{{ v_name }}">
   </label>
   <label>杯型
     <select name="size" required>
       {% for s in ['SMALL', 'MEDIUM', 'LARGE'] %}
-        <option value="{{ s }}" {% if product and product.size == s %}selected{% endif %}>{{ s }}</option>
+        <option value="{{ s }}" {% if v_size == s %}selected{% endif %}>{{ D.SIZE_LABELS.get(s, s) }}</option>
       {% endfor %}
     </select>
   </label>
   <label>售价
     <input name="unit_price" type="number" min="0.01" step="0.01" required
-           value="{{ product.unit_price if product else '' }}">
+           value="{{ v_price }}">
   </label>
   <label>销售状态
     <select name="sale_status">
-      <option value="ON_SALE" {% if product and product.sale_status == 'ON_SALE' %}selected{% endif %}>在售</option>
-      <option value="OFF_SHELF" {% if product and product.sale_status == 'OFF_SHELF' %}selected{% endif %}>已下架</option>
+      <option value="ON_SALE" {% if v_status == 'ON_SALE' %}selected{% endif %}>在售</option>
+      <option value="OFF_SHELF" {% if v_status == 'OFF_SHELF' %}selected{% endif %}>已下架</option>
     </select>
   </label>
   <button class="btn primary" type="submit">保存</button>

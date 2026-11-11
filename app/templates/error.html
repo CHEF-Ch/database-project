@@ -4,10 +4,17 @@
 {% block content %}
 <h1>{{ message }}</h1>
 <p class="kv">错误码：<code>{{ code }}</code></p>
-<p class="kv">请求标识：<code>{{ request_id }}</code></p>
 <p class="note">
   详细信息（SQL、堆栈、连接信息）只写入后端日志；
-  需要排查时请把上面的请求标识提供给管理员。
+  需要排查时请把<strong>页面底部</strong>的请求标识提供给管理员。
 </p>
-<p><a class="btn" href="{{ url_for('main.index') }}">返回首页</a></p>
+{# 出口：错误页原先只有「返回首页」，登录失败/会话失效时要绕两跳才能回到登录页 #}
+<p class="actions">
+  <a class="btn" href="{{ url_for('main.index') }}">返回首页</a>
+  {# 用 button + onclick，而不是 href="javascript:..."：后者不能中键新开、CSP 下会被拦、读屏也怪 #}
+  <button class="btn" type="button" onclick="history.back()">返回上一页</button>
+  {% if code in ('E2001', 'E2002') %}
+    <a class="btn primary" href="{{ url_for('auth.login', next=next_url) if next_url else url_for('auth.login') }}">去登录</a>
+  {% endif %}
+</p>
 {% endblock %}

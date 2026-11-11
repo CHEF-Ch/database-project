@@ -2,22 +2,43 @@
 {% block title %}登录 · MilkTeaShop{% endblock %}
 
 {% block content %}
+{% set fe = field_errors or {} %}
+{% set bad = fields or () %}
 <h1>登录</h1>
+
+{% if error %}
+<div class="banner error" role="alert">
+  <p><strong>登录未完成：</strong>{{ error.message }}<span class="note">（错误码 <code>{{ error.code }}</code>）</span></p>
+  {% if error.code == 'E2002' %}
+  <p class="note">
+    请核对用户名大小写与密码（两者不区分对错，避免泄露账号是否存在）；
+    连续失败请联系店长重置密码。
+  </p>
+  {% endif %}
+</div>
+{% endif %}
 
 <form method="post" action="{{ url_for('auth.login') }}" class="form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {# 会话过期时带上原路径，登录成功直接回去（路由侧有白名单校验） #}
+  {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
   <label>用户名
-    <input name="username" maxlength="30" required autofocus>
+    <input name="username" maxlength="30" required autofocus
+           value="{{ (form.get('username') if form else '') or '' }}"
+           {% if 'username' in bad %}aria-invalid="true"{% endif %}>
+    {% if fe.get('username') %}<span class="field-error">{{ fe['username'] }}</span>{% endif %}
   </label>
   <label>密码
-    <input name="password" type="password" maxlength="128" required>
+    <input name="password" type="password" maxlength="128" required
+           {% if 'password' in bad %}aria-invalid="true"{% endif %}>
+    {% if fe.get('password') %}<span class="field-error">{{ fe['password'] }}</span>{% endif %}
   </label>
   <button class="btn primary" type="submit">登录</button>
 </form>
 
 <h2>演示账号</h2>
 <table class="table">
-  <thead><tr><th>用户名</th><th>角色</th></tr></thead>
+  <thead><tr><th scope="col">用户名</th><th scope="col">角色</th></tr></thead>
   <tbody>
     {% for a in accounts %}
     <tr><td><code>{{ a.username }}</code></td><td>{{ a.label }}</td></tr>

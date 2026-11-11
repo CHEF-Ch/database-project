@@ -301,9 +301,13 @@ def reserve_order_stock(
     """
     for material_id in sorted(usages):
         if reserve_stock(cur, material_id, usages[material_id]) != 1:
+            # 文案只给"哪款原料不够"，**不给数量**（经营数据不外泄）；精确数字仍进 detail。
+            row = get_material(cur, material_id)
+            name = (row or {}).get("name") or material_id
             raise AppError(
                 ErrCode.BUSINESS_RULE,
-                detail=f"原料 {material_id} 可售量不足",
+                f"「{name}」可售量不足，做不出这么多杯；请减少数量、换一款或稍后再试。",
+                detail=f"原料 {material_id} 可售量不足（需 {usages[material_id]}）",
                 extra={"material_id": material_id},
             )
     return True
@@ -327,8 +331,8 @@ def release_order_stock(
         if release_reserved(cur, material_id, usages[material_id]) != 1:
             raise AppError(
                 ErrCode.BUSINESS_RULE,
-                "该订单的原料预占与当前配方不一致（配方在下单后被修改过），无法释放；"
-                "请联系管理员按退款处理。",
+                "该订单的原料预占与当前配方不一致（配方可能在下单后被修改过），无法释放。"
+                "前台无法自愈：请联系管理员在后台核对本单预占并处理。",
                 detail=f"原料 {material_id} 预占量不足以释放",
                 extra={"material_id": material_id},
             )
@@ -363,8 +367,8 @@ def confirm_order_stock(
         if confirm_reserved(cur, material_id, usages[material_id]) != 1:
             raise AppError(
                 ErrCode.BUSINESS_RULE,
-                "原料预占不足，无法确认付款（配方可能在下单后被修改过）；"
-                "请联系管理员按退款或手工处理。",
+                "原料预占不足，无法确认付款（配方可能在下单后被修改过）。"
+                "前台无法自愈：请联系管理员在后台核对本单预占并处理。",
                 detail=f"原料 {material_id} 预占不足，无法确认耗用",
                 extra={"material_id": material_id},
             )
@@ -438,7 +442,7 @@ def list_stock_logs(
         params.append(order_id)
 
     sql = """
-        SELECT l.stock_log_id, l.material_id, m.name AS material_name,
+        SELECT l.stock_log_id, l.material_id, m.name AS material_name, m.unit,
                l.log_type, l.qty, l.order_id, l.restock_id,
                l.employee_id, l.created_at
         FROM dbo.inv_stock_log AS l

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_display.html" as D %}
 {% block title %}商品 · MilkTeaShop{% endblock %}
 
 {% block content %}
@@ -22,18 +23,19 @@
   <p><a class="btn primary" href="{{ url_for('product.new_product') }}">新增商品</a></p>
 {% endif %}
 
+<div class="table-wrap">
 <table class="table">
   <thead>
-    <tr><th>编号</th><th>名称</th><th>杯型</th><th>售价</th><th>状态</th><th></th></tr>
+    <tr><th scope="col">编号</th><th scope="col">名称</th><th scope="col">杯型</th><th scope="col">售价</th><th scope="col">状态</th><th scope="col"><span class="sr-only">操作</span></th></tr>
   </thead>
   <tbody>
     {% for p in products %}
     <tr>
       <td><code>{{ p.product_id }}</code></td>
       <td>{{ p.name }}</td>
-      <td>{{ p.size }}</td>
+      <td>{{ D.SIZE_LABELS.get(p.size, p.size) }}</td>
       <td>{{ p.unit_price }}</td>
-      <td>{{ p.sale_status }}</td>
+      <td>{{ D.SALE_STATUS_LABELS.get(p.sale_status, p.sale_status) }}</td>
       <td><a class="btn" href="{{ url_for('product.detail', product_id=p.product_id) }}">详情</a></td>
     </tr>
     {% else %}
@@ -41,4 +43,7 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
+
+{% with rows = products %}{% include "_pager.html" %}{% endwith %}
 {% endblock %}

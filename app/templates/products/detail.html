@@ -1,12 +1,13 @@
 {% extends "base.html" %}
+{% import "_display.html" as D %}
 {% block title %}{{ product.name }} · MilkTeaShop{% endblock %}
 
 {% block content %}
-<h1>{{ product.name }}（{{ product.size }}）</h1>
-
+<h1>{{ product.name }}（{{ D.SIZE_LABELS.get(product.size, product.size) }}）</h1>
+<p class="crumb"><a href="{{ url_for('product.list_products') }}">← 返回商品列表</a></p>
 <p class="kv">编号：<code>{{ product.product_id }}</code></p>
 <p class="kv">售价：{{ product.unit_price }}</p>
-<p class="kv">状态：{{ product.sale_status }}</p>
+<p class="kv">状态：{{ D.SALE_STATUS_LABELS.get(product.sale_status, product.sale_status) }}</p>
 
 {% if 'product.write' in perms %}
   <p><a class="btn" href="{{ url_for('product.edit_product', product_id=product.product_id) }}">编辑</a></p>
@@ -14,7 +15,7 @@
 
 <h2>配方</h2>
 <table class="table">
-  <thead><tr><th>原料</th><th>单位</th><th>每杯用量</th></tr></thead>
+  <thead><tr><th scope="col">原料</th><th scope="col">单位</th><th scope="col">每杯用量</th></tr></thead>
   <tbody>
     {% for r in product.recipe %}
     <tr><td>{{ r.material_name }}</td><td>{{ r.unit }}</td><td>{{ r.qty }}</td></tr>
@@ -26,7 +27,7 @@
 
 <h2>可选加料</h2>
 <table class="table">
-  <thead><tr><th>加料</th><th>单位</th><th>单价</th><th>每份用量</th><th>状态</th></tr></thead>
+  <thead><tr><th scope="col">加料</th><th scope="col">单位</th><th scope="col">单价</th><th scope="col">每份用量</th><th scope="col">状态</th></tr></thead>
   <tbody>
     {% for a in product.addons %}
     <tr>
@@ -34,7 +35,7 @@
       <td>{{ a.unit }}</td>
       <td>{{ a.addon_price }}</td>
       <td>{{ a.addon_qty }}</td>
-      <td>{{ a.addon_status }}</td>
+      <td>{{ D.ADDON_STATUS_LABELS.get(a.addon_status, a.addon_status) }}</td>
     </tr>
     {% else %}
     <tr><td colspan="5" class="note">无可选加料。</td></tr>

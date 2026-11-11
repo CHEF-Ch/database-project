@@ -1,10 +1,11 @@
 {# 订单表格：列表页与「我的订单」共用；show_member 控制是否显示会员列 #}
+<div class="table-wrap">
 <table class="table wide">
   <thead>
     <tr>
-      <th>单号</th><th>创建时间</th><th>渠道 / 方式</th>
-      {% if show_member %}<th>会员</th>{% endif %}
-      <th>券前</th><th>优惠</th><th>应付</th><th>状态</th><th>支付</th><th></th>
+      <th scope="col">单号</th><th scope="col">创建时间</th><th scope="col">渠道 / 方式</th>
+      {% if show_member %}<th scope="col">会员</th>{% endif %}
+      <th scope="col">券前</th><th scope="col">优惠</th><th scope="col">应付</th><th scope="col">状态</th><th scope="col">支付</th><th scope="col"><span class="sr-only">操作</span></th>
     </tr>
   </thead>
   <tbody>
@@ -29,3 +30,4 @@
     {% endfor %}
   </tbody>
 </table>
+</div>

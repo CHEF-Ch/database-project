@@ -1,0 +1,32 @@
+{# ---------------------------------------------------------------------------
+   展示层小工具：枚举 → 中文、时间格式化。
+
+   只影响**显示**，不参与任何业务判断（业务口径仍在业务层/数据库层）。
+   术语取自 docs/02-数据字典.md §1.1 与取值 CHECK（sql/constraint.sql）：
+     size            SMALL/MEDIUM/LARGE
+     sale_status     ON_SALE/OFF_SHELF
+     addon_status    AVAILABLE/UNAVAILABLE
+     restock_status  PENDING/RECEIVED/CANCELLED
+     log_type        IN/SALE/LOSS/GAIN/SHORT
+   用法：{% import "_display.html" as D %} → {{ D.SIZE_LABELS.get(x, x) }} / {{ D.dt(t) }}
+--------------------------------------------------------------------------- #}
+{% set SIZE_LABELS = {'SMALL': '小杯', 'MEDIUM': '中杯', 'LARGE': '大杯'} %}
+{% set SALE_STATUS_LABELS = {'ON_SALE': '在售', 'OFF_SHELF': '已下架'} %}
+{% set ADDON_STATUS_LABELS = {'AVAILABLE': '可选', 'UNAVAILABLE': '不可选'} %}
+{% set RESTOCK_STATUS_LABELS = {'PENDING': '待验收', 'RECEIVED': '已入库', 'CANCELLED': '已取消'} %}
+{% set LOG_TYPE_LABELS = {'IN': '入库', 'SALE': '销售扣料', 'LOSS': '损耗', 'GAIN': '盘盈', 'SHORT': '盘亏'} %}
+
+{# 三类流水“数值存正数绝对值、方向由 type 决定”（docs/02 §8）：
+   SALE/LOSS/SHORT 为负向，IN/GAIN 为正向。
+   ⚠ 下面只是在**展示**时补方向符号，库里的 inv_stock_log.qty 仍是绝对值。 #}
+{% set NEGATIVE_LOG_TYPES = ('SALE', 'LOSS', 'SHORT') %}
+
+{# 时间统一到「分钟」：列表页与详情/流水页原先是两种格式（一个带秒一个不带） #}
+{% macro dt(value) -%}
+{{ value.strftime('%Y-%m-%d %H:%M') if value else '—' }}
+{%- endmacro %}
+
+{# 带方向的流水数量 + 单位，例：-3.00 克 / +100.00 克 #}
+{% macro signed_qty(log_type, qty, unit) -%}
+{{ '-' if log_type in NEGATIVE_LOG_TYPES else '+' }}{{ qty }}{{ (' ' ~ unit) if unit else '' }}
+{%- endmacro %}
