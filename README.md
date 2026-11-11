@@ -100,11 +100,11 @@
 
 ```powershell
 # 实例名按实际环境修改；这 6 步已由 ⑦ 的 REPRO-01 实测（在空实例上删库重建，6 步 exit=0，
-# 结果：17 表 / 110 列 / 45 CHECK / 127 行，与 v0.1 基线一致）
+# 结果：17 表 / 110 列 / 45 CHECK / 131 行，与 v0.1 基线一致）
 sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/00-create.sql        # 删库建库
 sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/01-schema.sql        # 17 张表（列/非空/默认值）
 sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/constraint.sql       # 主码/候选码/外码/CHECK
-sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/02-seed.sql          # 样例数据（17 表 127 行）
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/02-seed.sql          # 样例数据（17 表 131 行）
 sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/view.sql             # 4 个统计视图
 sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/role.sql             # v0.1 角色与权限
 ```

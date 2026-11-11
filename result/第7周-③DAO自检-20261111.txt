@@ -1,9 +1,9 @@
 ================================================================================
-第 7 周 步骤 ③ 数据访问层（DAO）自检证据（2026-11-11，最终稿）
+第 7 周 步骤 ③ 数据访问层（DAO）自检证据（2026-11-11，seed 补数据后）
 ================================================================================
 命令：python scripts/dao_test.py
 说明：③ 数据访问层 37 项 DAO 用例；所有写操作在事务内执行并在退出时回滚，业务行数不变。
-本版为 2026-11-11 前端/服务层收口最终稿：get_order_items 增补 product_name；list_stock_logs 增补 m.unit；预占不足的报错文案改为“前台无法自愈、请后台核对”。
+本版为 2026-11-11 seed 调整后重跑：seed 增 4 条加料选项（共 9 条）、券规则有效期延至 2027-12-31；usable_coupon 的过期判定改用更晚的取样日。
 ================================================================================
 test_adjust_stock_preserves_reserved (__main__.DaoGuardTests.test_adjust_stock_preserves_reserved) ... ok
 test_cancel_order_with_stock (__main__.DaoGuardTests.test_cancel_order_with_stock) ... ok
@@ -44,6 +44,6 @@ test_stock_actions (__main__.DaoWriteTests.test_stock_actions) ... ok
 test_transaction_rollback_on_exception (__main__.DaoWriteTests.test_transaction_rollback_on_exception) ... ok
 
 ----------------------------------------------------------------------
-Ran 37 tests in 1.133s
+Ran 37 tests in 0.951s
 
 OK

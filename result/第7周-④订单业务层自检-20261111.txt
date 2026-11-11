@@ -1,9 +1,9 @@
 ================================================================================
-第 7 周 步骤 ④ 订单业务层自检证据（2026-11-11，最终稿）
+第 7 周 步骤 ④ 订单业务层自检证据（2026-11-11，seed 补数据后）
 ================================================================================
 命令：python scripts/order_service_test.py
 说明：④ 订单业务层 29 项用例；所有写操作在事务内执行并在退出时回滚，业务行数不变。
-本版为 2026-11-11 前端/服务层收口最终稿：pay_order 增“顾客不得用现金支付”；券门槛/下架/加料/订单状态等业务错误补用户可见文案。
+本版为 2026-11-11 seed 调整后重跑：券有效期延长后，用券用例恢复按“今天可用”路径执行。
 ================================================================================
 test_addon_must_be_addon_kind (__main__.OrderServiceTest.test_addon_must_be_addon_kind) ... ok
 test_balance_insufficient (__main__.OrderServiceTest.test_balance_insufficient) ... ok
@@ -40,6 +40,6 @@ test_update_status_invalid_pending_to_completed (__main__.OrderServiceTest.test_
 test_update_status_paid_making_completed (__main__.OrderServiceTest.test_update_status_paid_making_completed) ... ok
 
 ----------------------------------------------------------------------
-Ran 29 tests in 0.935s
+Ran 29 tests in 0.875s
 
 OK
