@@ -73,6 +73,21 @@ def _read_role(role: str | None) -> str:
     return role
 
 
+_STATUS_LABELS = {
+    "PENDING": "待支付",
+    "PAID": "已支付",
+    "MAKING": "制作中",
+    "COMPLETED": "已完成",
+    "CANCELLED": "已取消",
+    "REFUNDED": "已退款",
+}
+
+
+def _status_label(status: str) -> str:
+    """订单状态 → 中文（只用于错误提示；业务判断仍用英文枚举）。"""
+    return _STATUS_LABELS.get(status, status)
+
+
 def _money(value) -> Decimal:
     try:
         return Decimal(str(value)).quantize(Decimal("0.01"))
@@ -283,7 +298,11 @@ def _load_lines(cur, lines: list[dict]) -> tuple[Decimal, dict[str, Decimal]]:
         if product is None:
             raise AppError(ErrCode.NOT_FOUND, detail=f"商品不存在：{line['product_id']}")
         if product["sale_status"] != "ON_SALE":
-            raise AppError(ErrCode.BUSINESS_RULE, detail=f"商品已下架：{line['product_id']}")
+            raise AppError(
+                ErrCode.BUSINESS_RULE,
+                f"「{product['name']}」已下架，请换一款。",
+                detail=f"商品已下架：{line['product_id']}",
+            )
 
         size = product["size"]
         unit_price = _money(product["unit_price"])
@@ -295,6 +314,7 @@ def _load_lines(cur, lines: list[dict]) -> tuple[Decimal, dict[str, Decimal]]:
         if not recipe:
             raise AppError(
                 ErrCode.BUSINESS_RULE,
+                f"「{product['name']}」暂时无法下单（未维护配方），请联系店长。",
                 detail=f"商品没有配方，无法扣料：{product['product_id']}",
             )
         for row in recipe:
@@ -307,6 +327,7 @@ def _load_lines(cur, lines: list[dict]) -> tuple[Decimal, dict[str, Decimal]]:
             if option is None:
                 raise AppError(
                     ErrCode.BUSINESS_RULE,
+                    f"「{product['name']}」不支持这个加料，请刷新页面重选。",
                     detail=f"商品 {product['product_id']} 不支持加料 {addon['material_id']}",
                 )
             if option["material_kind"] != "ADDON":
@@ -317,6 +338,7 @@ def _load_lines(cur, lines: list[dict]) -> tuple[Decimal, dict[str, Decimal]]:
             if option["addon_status"] != "AVAILABLE":
                 raise AppError(
                     ErrCode.BUSINESS_RULE,
+                    "所选加料当前不可选（可能已停售），请刷新页面重选。",
                     detail=f"加料 {addon['material_id']} 当前不可选",
                 )
             addon_price = _money(option["addon_price"])
@@ -361,8 +383,11 @@ def _apply_coupon(
 
     threshold = _money(coupon["threshold_amount"])
     if subtotal < threshold:
+        # 差额可对用户说（是他自己这张单的金额），但明细仍进 detail
         raise AppError(
             ErrCode.BUSINESS_RULE,
+            f"这张券要满 {threshold} 元才能用，本单券前 {subtotal} 元，"
+            f"还差 {_money(threshold - subtotal)} 元。",
             detail=f"未达到券门槛：{subtotal} < {threshold}",
         )
     return _money(coupon["discount_amount"]), coupon
@@ -609,6 +634,14 @@ def pay_order(
         raise AppError(ErrCode.FORBIDDEN)
     order_id = _order_id(order_id)
     method = _enum(pay_method, PAY_METHODS, label="支付方式")
+    # "现金 = 收银台当场结清"是店员的动作（docs/01 §4）：顾客自助单只允许线上/余额，
+    # 否则顾客可以把自己的待支付单直接标成"现金已支付"（状态 PAID + 扣料 + 券核销 + 计积分），
+    # 而钱并没有收到。页面也按角色隐藏该选项，这里是真正生效的那一道。
+    if role == "customer" and method == "CASH":
+        raise AppError(
+            ErrCode.FORBIDDEN,
+            "现金支付需由店员在收银台确认；顾客自助单请选择线上支付或会员余额。",
+        )
     txn = (pay_txn_no or "").strip() or None
     if method == "ONLINE" and not txn:
         raise AppError(ErrCode.PARAM_INVALID, "线上支付必须提供支付流水号。")
@@ -630,6 +663,7 @@ def pay_order(
         if order["order_status"] != "PENDING":
             raise AppError(
                 ErrCode.BUSINESS_RULE,
+                f"这张单当前是「{_status_label(order['order_status'])}」，不能再支付。",
                 detail=f"订单状态 {order['order_status']} 不能支付",
             )
 
@@ -721,6 +755,8 @@ def cancel_order(
         if order["order_status"] != "PENDING":
             raise AppError(
                 ErrCode.BUSINESS_RULE,
+                f"这张单当前是「{_status_label(order['order_status'])}」，不能取消"
+                "（已付款请走退款）。",
                 detail=f"订单状态 {order['order_status']} 不能取消（已付款请走退款）",
             )
 

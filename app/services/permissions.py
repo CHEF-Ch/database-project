@@ -41,6 +41,10 @@ PERMISSIONS: dict[str, set[str]] = {
     "stock": {
         "product.read",
         "inventory.read",
+        # 流水表在 DB 层只授权给 stock_keeper / manager（sql/app_login.sql:213 对 role_cashier
+        # 做了 REVOKE），所以"看库存"与"看流水"必须是两个权限点，否则 clerk 会走成
+        # "应用放行 → 数据库 403"（trusted 模式下还看不出来）。
+        "inventory.logs.read",
         "inventory.adjust",
         "restock.create",
     },
@@ -48,6 +52,7 @@ PERMISSIONS: dict[str, set[str]] = {
         "product.read",
         "product.write",
         "inventory.read",
+        "inventory.logs.read",
         "order.read",
         "order.refund",
         "coupon.write",
