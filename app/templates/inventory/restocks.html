@@ -1,43 +1,65 @@
 {% extends "base.html" %}
+{% import "_display.html" as D %}
 {% block title %}补货单 · MilkTeaShop{% endblock %}
 
 {% block content %}
 <h1>补货单</h1>
+<p class="crumb"><a href="{{ url_for('inventory.list_stock') }}">← 返回库存</a></p>
+{# 回填：新建失败时从 request.form 取回供应商/原料/数量 #}
+{% set v_supplier = (form.get('supplier_name', '') if form else '') or '' %}
+{% set v_material = (form.get('material_id', '') if form else '') or '' %}
+{% set v_qty = (form.get('qty', '') if form else '') or '' %}
+{% if error %}
+<div class="banner error" role="alert">
+  <p><strong>提交未完成：</strong>{{ error.message }}<span class="note">（错误码 <code>{{ error.code }}</code>）</span></p>
+  <p class="note">
+    已保留你刚才填写的内容，可直接修改后重新提交。
+    若反复失败，请把请求标识 <code>{{ g.request_id }}</code> 提供给管理员。
+  </p>
+</div>
+{% endif %}
 
 <h2>新建补货单</h2>
 <form method="post" action="{{ url_for('inventory.create_restock') }}" class="form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>供应商
-    <input name="supplier_name" maxlength="100" required>
+    <input name="supplier_name" maxlength="100" required value="{{ v_supplier }}">
   </label>
   <label>原料
     <select name="material_id">
       {% for m in all_materials %}
-        <option value="{{ m.material_id }}">{{ m.material_id }} · {{ m.name }}</option>
+        <option value="{{ m.material_id }}" {% if v_material == m.material_id %}selected{% endif %}>{{ m.material_id }} · {{ m.name }}</option>
       {% endfor %}
     </select>
   </label>
   <label>数量
-    <input name="qty" type="number" min="0.01" step="0.01" required>
+    <input name="qty" type="number" min="0.01" step="0.01" required value="{{ v_qty }}">
   </label>
   <button class="btn primary" type="submit">新建补货单</button>
 </form>
 <p class="note">v1.0 简化：一张补货单只补一种原料，多原料拆成多张单。</p>
 
 <h2>补货单列表</h2>
+<div class="table-wrap">
 <table class="table wide">
-  <thead><tr><th>单号</th><th>供应商</th><th>状态</th><th>明细</th><th>经办</th><th>创建时间</th><th></th></tr></thead>
+  <thead><tr><th scope="col">单号</th><th scope="col">供应商</th><th scope="col">状态</th><th scope="col">明细</th><th scope="col">经办</th><th scope="col">创建时间</th><th scope="col"><span class="sr-only">操作</span></th></tr></thead>
   <tbody>
     {% for r in restocks %}
     <tr>
       <td><code>{{ r.restock_id }}</code></td>
       <td>{{ r.supplier_name }}</td>
-      <td>{{ r.restock_status }}</td>
-      <td>{% for i in r['items'] %}{{ i.material_name }}×{{ i.qty }}{% if not loop.last %}、{% endif %}{% endfor %}</td>
+      <td>{{ D.RESTOCK_STATUS_LABELS.get(r.restock_status, r.restock_status) }}</td>
+      <td>{% for i in r['items'] %}{{ i.material_name }}×{{ i.qty }}{{ i.unit }}{% if not loop.last %}、{% endif %}{% endfor %}</td>
       <td>{{ r.employee_id }}</td>
-      <td>{{ r.created_at }}</td>
+      <td>{{ D.dt(r.created_at) }}</td>
       <td>{% if r.restock_status == 'PENDING' %}
-        <form method="post" action="{{ url_for('inventory.receive_restock', restock_id=r.restock_id) }}" style="margin:0;">
+        {# 验收 = 加库存 + 写 IN 流水，且无撤销入口；供应商/明细走 data-* 属性
+           （属性值会被正确转义成数据），绝不能拼进 confirm 的 JS 字符串字面量。 #}
+        <form method="post" action="{{ url_for('inventory.receive_restock', restock_id=r.restock_id) }}"
+              class="receive-form" style="margin:0;"
+              data-restock="{{ r.restock_id }}"
+              data-supplier="{{ r.supplier_name }}"
+              data-items="{% for i in r['items'] %}{{ i.material_name }}×{{ i.qty }}{{ i.unit }}{% if not loop.last %}、{% endif %}{% endfor %}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button class="btn" type="submit">验收</button>
         </form>
@@ -48,6 +70,26 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
+
+{% with rows = restocks %}{% include "_pager.html" %}{% endwith %}
 
 <p><a class="btn" href="{{ url_for('inventory.list_stock') }}">返回库存</a></p>
+
+<script>
+/* 二次确认：把“哪张单、什么货、多少”摆出来再提交。
+   addEventListener + preventDefault（onclick="confirm()" 那种写法拦不住提交）。 */
+(function () {
+  document.querySelectorAll('form.receive-form').forEach(function (form) {
+    form.addEventListener('submit', function (ev) {
+      var d = form.dataset;
+      var msg = '确认验收补货单 ' + (d.restock || '') + '？\n\n'
+        + '供应商：' + (d.supplier || '—') + '\n'
+        + '明细：' + (d.items || '—') + '\n\n'
+        + '验收后库存立即增加并写入 IN 库存流水，不能撤销。';
+      if (!window.confirm(msg)) { ev.preventDefault(); }
+    });
+  });
+})();
+</script>
 {% endblock %}

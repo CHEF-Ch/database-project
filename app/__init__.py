@@ -42,6 +42,15 @@ def create_app() -> Flask:
     for blueprint in (main_bp, auth_bp, product_bp, inventory_bp, order_bp):
         app.register_blueprint(blueprint)
 
+    # 顶栏导航按角色显隐：把当前角色的权限点/角色注入所有模板（含错误页、登录页）。
+    # 路由显式传入的 perms 会覆盖这里的值（Jinja 以 render 关键字为准）。
+    from app.services.permissions import PERMISSIONS, current_role
+
+    @app.context_processor
+    def _inject_nav():
+        role = current_role()
+        return {"perms": PERMISSIONS.get(role or "", set()), "role": role}
+
     app.logger.info(
         "应用启动 db=%s auth=%s user_store=%s",
         Config.DB_NAME,

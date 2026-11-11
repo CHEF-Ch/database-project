@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_display.html" as D %}
 {% block title %}库存 · MilkTeaShop{% endblock %}
 
 {% block content %}
@@ -15,32 +16,86 @@
 </form>
 
 <p class="note">
+  {# 流水表在数据库层只授权给 stock_keeper / manager（sql/app_login.sql:213 对 role_cashier 做了 REVOKE），
+     clerk 在 DB_AUTH=sql 下点这里必然 403，所以按角色隐藏链接；真正的拦截仍在数据库层。 #}
+  {% if 'inventory.logs.read' in perms %}
   <a href="{{ url_for('inventory.stock_logs') }}">库存流水</a>
-  {% if 'restock.create' in perms %} · <a href="{{ url_for('inventory.restocks') }}">补货单管理</a>{% endif %}
+  {% endif %}
+  {% if 'inventory.logs.read' in perms and 'restock.create' in perms %} · {% endif %}
+  {% if 'restock.create' in perms %}<a href="{{ url_for('inventory.restocks') }}">补货单管理</a>{% endif %}
 </p>
 
 {% if 'inventory.adjust' in perms %}
 <h2>调整库存</h2>
-<form method="post" action="{{ url_for('inventory.adjust_stock') }}" class="form inline">
+{# 回填：提交失败时从 request.form 取回用户选的原料与增减量；首次进入为空 #}
+{% set v_material = (form.get('material_id', '') if form else '') or '' %}
+{% set v_delta = (form.get('delta', '') if form else '') or '' %}
+{% set v_log_type = (form.get('log_type', '') if form else '') or '' %}
+{% if error %}
+<div class="banner error" role="alert">
+  <p><strong>提交未完成：</strong>{{ error.message }}<span class="note">（错误码 <code>{{ error.code }}</code>）</span></p>
+  <p class="note">
+    已保留你刚才填写的内容，可直接修改后重新提交。
+    若反复失败，请把请求标识 <code>{{ g.request_id }}</code> 提供给管理员。
+  </p>
+</div>
+{% endif %}
+{# 口径：下拉里直接带「现行存量 + 单位」，避免选错原料/搞错量纲；
+   首项留空 + required，不再默认选中第一条原料。
+   确认框只负责挡误点，真正的校验（0 / 负到负库存 / 不存在）仍由业务层。 #}
+<form method="post" action="{{ url_for('inventory.adjust_stock') }}" class="form inline"
+      id="stock-adjust-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <label>原料
-    <select name="material_id">
+    <select name="material_id" required>
+      <option value="">请选择原料</option>
       {% for m in all_materials %}
-        <option value="{{ m.material_id }}">{{ m.material_id }} · {{ m.name }}</option>
+        <option value="{{ m.material_id }}" {% if v_material == m.material_id %}selected{% endif %}>{{ m.material_id }} · {{ m.name }}（现存 {{ m.stock_qty }} {{ m.unit }}）</option>
       {% endfor %}
     </select>
   </label>
-  <label>增减量
-    <input name="delta" type="number" step="0.01" required placeholder="正数入库 / 负数出库">
+  <label>类型
+    {# 流水类型决定方向：GAIN 盘盈(+)、SHORT 盘亏(-)、LOSS 报损(-)。
+       留空则按数量正负自动推导（沿用旧口径，兼容既有操作习惯）。 #}
+    <select name="log_type">
+      <option value="" {% if not v_log_type %}selected{% endif %}>按数量正负自动（正=盘盈 / 负=盘亏）</option>
+      <option value="GAIN" {% if v_log_type == 'GAIN' %}selected{% endif %}>盘盈（GAIN，正向）</option>
+      <option value="SHORT" {% if v_log_type == 'SHORT' %}selected{% endif %}>盘亏（SHORT，负向）</option>
+      <option value="LOSS" {% if v_log_type == 'LOSS' %}selected{% endif %}>报损（LOSS，负向）</option>
+    </select>
+  </label>
+  <label>数量（单位随所选原料，填绝对值）
+    <input name="delta" type="number" step="0.01" required placeholder="如 10 或 2.5" value="{{ v_delta }}">
   </label>
   <button class="btn primary" type="submit">调整</button>
 </form>
-<p class="note">正数记 GAIN、负数记 SHORT，与库存流水同事务写入。</p>
+<p class="note">
+  类型决定流水方向（盘盈 GAIN / 盘亏 SHORT / 报损 LOSS），数量一律填绝对值；
+  类型留空时按数量正负自动推导（正=GAIN、负=SHORT）。库存与流水同事务写入。
+</p>
+<script>
+/* 二次确认：把“改哪一项、现在多少、本次增多少”写进弹框。
+   addEventListener + preventDefault（而不是 onclick="confirm()"，那种写法拦不住提交）。 */
+(function () {
+  var form = document.getElementById('stock-adjust-form');
+  if (!form) { return; }
+  var sel = form.querySelector('select[name="material_id"]');
+  var delta = form.querySelector('input[name="delta"]');
+  form.addEventListener('submit', function (ev) {
+    var opt = sel.options[sel.selectedIndex];
+    var msg = '确定提交库存变动吗？\n\n' + (opt ? opt.text : '') +
+              '\n本次增减：' + (delta.value || '0') +
+              '\n\n提交后会同时写入库存流水（正数 GAIN / 负数 SHORT），不能撤销。';
+    if (!window.confirm(msg)) { ev.preventDefault(); }
+  });
+})();
+</script>
 {% endif %}
 
+<div class="table-wrap">
 <table class="table wide">
   <thead>
-    <tr><th>编号</th><th>名称</th><th>单位</th><th>类型</th><th>现存</th><th>预占</th><th>可售</th><th>安全库存</th><th></th></tr>
+    <tr><th scope="col">编号</th><th scope="col">名称</th><th scope="col">单位</th><th scope="col">类型</th><th scope="col">现存</th><th scope="col">预占</th><th scope="col">可售</th><th scope="col">安全库存</th><th scope="col"><span class="sr-only">提示</span></th></tr>
   </thead>
   <tbody>
     {% for m in materials %}
@@ -60,4 +115,33 @@
     {% endfor %}
   </tbody>
 </table>
+</div>
+
+{% with rows = materials %}{% include "_pager.html" %}{% endwith %}
+
+{% if recent_logs %}
+<h2>最近库存流水</h2>
+<div class="table-wrap">
+<table class="table wide">
+  <thead>
+    <tr><th scope="col">流水号</th><th scope="col">原料</th><th scope="col">类型</th><th scope="col">数量</th><th scope="col">经办</th><th scope="col">时间</th></tr>
+  </thead>
+  <tbody>
+    {% for l in recent_logs or [] %}
+    <tr>
+      <td>{{ l.stock_log_id }}</td>
+      <td>{{ l.material_name }}</td>
+      <td>{{ D.LOG_TYPE_LABELS.get(l.log_type, l.log_type) }}</td>
+      <td>{{ D.signed_qty(l.log_type, l.qty, l.unit) }}</td>
+      <td>{{ l.employee_id }}</td>
+      <td>{{ D.dt(l.created_at) }}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="note">暂无流水。</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="note">只显示最近 5 条；完整记录见 <a href="{{ url_for('inventory.stock_logs') }}">库存流水</a>。</p>
+{% endif %}
 {% endblock %}

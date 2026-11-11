@@ -21,13 +21,5 @@
   {% include "orders/_table.html" %}
 {% endwith %}
 
-<p class="pager">
-  {% if orders %}
-    第 {{ offset + 1 }}—{{ offset + orders|length }} 条（每页 {{ limit }}）
-  {% else %}
-    共 0 条
-  {% endif %}
-  {% if prev_url %}<a class="btn" href="{{ prev_url }}">上一页</a>{% endif %}
-  {% if next_url %}<a class="btn" href="{{ next_url }}">下一页</a>{% endif %}
-</p>
+{% with rows = orders %}{% include "_pager.html" %}{% endwith %}
 {% endblock %}

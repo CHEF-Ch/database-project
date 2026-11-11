@@ -18,9 +18,14 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from flask import Blueprint, current_app, g, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, flash, g, redirect, render_template, request, session, url_for
 
 from app.errors import AppError, ErrCode
+from app.pages._paging import (
+    date_arg as _date_arg,
+    page_url as _page_url,
+    parse_paging,
+)
 from app.services import order_service, product_service
 from app.services.permissions import (
     PERMISSIONS,
@@ -83,39 +88,9 @@ def _text(name: str) -> str:
     return (request.args.get(name) or "").strip()
 
 
-def _int_arg(name: str, default: int, *, low: int, high: int) -> int:
-    raw = (request.args.get(name) or "").strip()
-    if not raw:
-        return default
-    try:
-        value = int(raw)
-    except ValueError:
-        raise AppError(ErrCode.PARAM_INVALID, f"{name} 必须是整数。") from None
-    return max(low, min(high, value))
-
-
-def _date_arg(name: str) -> date | None:
-    """``YYYY-MM-DD`` → date；空串返回 None；非法值按 400 处理。"""
-    raw = (request.args.get(name) or "").strip()
-    if not raw:
-        return None
-    try:
-        return datetime.strptime(raw, "%Y-%m-%d").date()
-    except ValueError:
-        raise AppError(ErrCode.PARAM_INVALID, f"{name} 日期格式应为 YYYY-MM-DD。") from None
-
-
 def _paging() -> tuple[int, int]:
-    limit = _int_arg("limit", PAGE_SIZE, low=1, high=MAX_PAGE_SIZE)
-    offset = _int_arg("offset", 0, low=0, high=10_000_000)
-    return limit, offset
-
-
-def _page_url(endpoint: str, **overrides) -> str:
-    """翻页链接：在当前查询串基础上只改 offset，其它筛选条件不丢。"""
-    args = request.args.to_dict()
-    args.update({key: str(value) for key, value in overrides.items()})
-    return url_for(endpoint, **args)
+    """订单/我的订单每页默认 50 条（公用实现见 ``app/pages/_paging.py``）。"""
+    return parse_paging(PAGE_SIZE, MAX_PAGE_SIZE)
 
 
 def _decorate_items(items: list[dict]) -> list[dict]:
@@ -157,35 +132,49 @@ def _member_for_submit(role: str | None) -> str | None:
     return (request.form.get("member_id") or "").strip() or None
 
 
+# 同一商品允许"同款不同配料"的多行：第 1 行沿用无后缀字段名（与既有测试/接口一致），
+# 第 2 行起加 ``.{n}`` 后缀（qty.P0000001.2 / sugar.P0000001.2 / addon.P0000001.M0000004.2）。
+# 上限 6 行：既能满足"两杯不同糖度/一杯加珍珠"，也不给恶意构造留无限循环的缝。
+MAX_VARIANT_ROWS = 6
+
+
 def _collect_items(products: list[dict]) -> list[dict]:
     """把表单里的逐商品勾选还原成 ``order_service.create_order`` 的 items。
 
     只遍历**服务端刚查出来的在售商品**（不听表单里的 product_id），因此提交里多塞
     的商品会被忽略；数量/加料原样交给业务层校验（range、是否属于该商品、是否 ADDON）。
+
+    同一商品可出现多行（杯型相同的"同款不同配料"）：数据库 ``order_item`` 主码是
+    ``(order_id, item_line)``，没有 ``(order_id, product_id)`` 唯一约束，业务层按行
+    顺序编号 item_line，因此这类单在数据层本来就合法，缺的只是页面表达力。
     """
     items: list[dict] = []
     for product in products:
         product_id = product["product_id"]
-        qty = (request.form.get(f"qty.{product_id}") or "").strip()
-        if qty in ("", "0"):
-            continue
-        addons = []
-        for option in product.get("addons") or []:
-            material_id = option["material_id"]
-            raw = (request.form.get(f"addon.{product_id}.{material_id}") or "").strip()
-            if raw in ("", "0"):
+        for row in range(1, MAX_VARIANT_ROWS + 1):
+            suffix = "" if row == 1 else f".{row}"
+            qty = (request.form.get(f"qty.{product_id}{suffix}") or "").strip()
+            if qty in ("", "0"):
                 continue
-            addons.append({"material_id": material_id, "qty": raw})
-        items.append(
-            {
-                "product_id": product_id,
-                "qty": qty,
-                "sugar_level": request.form.get(f"sugar.{product_id}") or "FULL",
-                "ice_level": request.form.get(f"ice.{product_id}") or "REGULAR",
-                "temp_level": request.form.get(f"temp.{product_id}") or "COLD",
-                "addons": addons,
-            }
-        )
+            addons = []
+            for option in product.get("addons") or []:
+                material_id = option["material_id"]
+                raw = (
+                    request.form.get(f"addon.{product_id}.{material_id}{suffix}") or ""
+                ).strip()
+                if raw in ("", "0"):
+                    continue
+                addons.append({"material_id": material_id, "qty": raw})
+            items.append(
+                {
+                    "product_id": product_id,
+                    "qty": qty,
+                    "sugar_level": request.form.get(f"sugar.{product_id}{suffix}") or "FULL",
+                    "ice_level": request.form.get(f"ice.{product_id}{suffix}") or "REGULAR",
+                    "temp_level": request.form.get(f"temp.{product_id}{suffix}") or "COLD",
+                    "addons": addons,
+                }
+            )
     return items
 
 
@@ -208,6 +197,31 @@ def _coupon_id_from_form() -> int | None:
         return int(raw)
     except ValueError:
         raise AppError(ErrCode.PARAM_INVALID, "券编号必须是整数。") from None
+
+
+def _action_hint(order: dict, perms: set[str], actions: set[str]) -> str | None:
+    """没有可执行操作时，说明**为什么没有**以及下一步找谁。
+
+    避免页面上出现"操作区整块消失、用户不知道是权限问题还是故障"的空档。
+    措辞刻意避开按钮文案（"整单退款"/"开始制作"/"完成制作"），
+    否则会撞 order_pages_test 里"该按钮不该出现"的断言。
+    """
+    if actions:
+        return None
+    status = order["order_status"]
+    if status == "PENDING":
+        return "待支付单由店员或顾客完成支付；如需退单请等支付完成后由店长操作。"
+    if status == "PAID":
+        if "order.refund" not in perms:
+            return "已支付。如需退单，请由店长在本页操作。"
+        return "已支付，暂无其他可用操作。"
+    if status == "MAKING":
+        return "制作中，做完后由制作员/收银员确认完成。"
+    return {
+        "COMPLETED": "订单已完成，没有后续操作；需要同样的一单可以点下面的「再下一单」。",
+        "CANCELLED": "订单已取消，预占库存与券已释放，没有后续操作。",
+        "REFUNDED": "订单已退款，金额与积分已冲正、库存不回补，没有后续操作。",
+    }.get(status, "当前状态没有可用操作。")
 
 
 def _detail_actions(order: dict, perms: set[str]) -> set[str]:
@@ -328,14 +342,17 @@ def detail(order_id):
     )
     order = detail_data["order"]
     perms = _perms()
+    actions = _detail_actions(order, perms)
     return render_template(
         "orders/detail.html",
         order=order,
         items=_decorate_items(detail_data["items"]),
         platform=detail_data.get("platform"),
         stock_logs=detail_data.get("stock_logs") or [],
-        actions=_detail_actions(order, perms),
+        actions=actions,
+        action_hint=_action_hint(order, perms, actions),
         perms=perms,
+        is_customer=(role == "customer"),
         statuses=STATUS_LABELS,
         channels=CHANNEL_LABELS,
         modes=MODE_LABELS,
@@ -449,6 +466,7 @@ def create_order():
             ),
             err.status,
         )
+    flash(f"订单已创建：{created['order']['order_id']}（{STATUS_LABELS.get(created['order']['order_status'], created['order']['order_status'])}）。", "success")
     return redirect(url_for("order.detail", order_id=created["order"]["order_id"]))
 
 
@@ -464,6 +482,7 @@ def pay(order_id):
         pay_txn_no=request.form.get("pay_txn_no"),
         member_id=session.get("member_id"),
     )
+    flash("支付已确认，订单状态已更新。", "success")
     return redirect(url_for("order.detail", order_id=order_id))
 
 
@@ -474,6 +493,7 @@ def cancel(order_id):
         order_id,
         member_id=session.get("member_id"),
     )
+    flash("订单已取消，预占库存与券已释放。", "success")
     return redirect(url_for("order.detail", order_id=order_id))
 
 
@@ -481,6 +501,8 @@ def cancel(order_id):
 @role_required("order.refund")
 def refund(order_id):
     order_service.refund_order(order_id)
+    # 措辞刻意避开页面上的按钮文案（"整单退款"），避免与"不该出现"类断言混淆
+    flash("退款已完成：积分已冲正、余额与券已退回，库存不恢复。", "success")
     return redirect(url_for("order.detail", order_id=order_id))
 
 
@@ -488,4 +510,5 @@ def refund(order_id):
 @role_required("order.update_status")
 def update_status(order_id):
     order_service.update_order_status(order_id, to_status=request.form.get("to_status"))
+    flash("订单状态已更新。", "success")
     return redirect(url_for("order.detail", order_id=order_id))

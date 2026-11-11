@@ -126,6 +126,17 @@ def wants_json() -> bool:
     return request.accept_mimetypes.best == "application/json"
 
 
+def _login_next_url(err: AppError) -> str | None:
+    """未登录访问受保护页时，记下原路径，供「去登录」登录后回跳。
+
+    只对 GET + E2001 记录：POST 的表单内容无法重放，回跳过去也没有意义；
+    登录失败（E2002）时原路径就是 /login 本身，记了反而绕圈。
+    """
+    if err.code != ErrCode.AUTH_REQUIRED or request.method != "GET":
+        return None
+    return request.full_path if request.query_string else request.path
+
+
 def _render_error(err: AppError) -> Response:
     if wants_json():
         return jsonify(err.to_dict()), err.status
@@ -135,6 +146,7 @@ def _render_error(err: AppError) -> Response:
             code=err.code,
             message=err.message,
             request_id=getattr(g, "request_id", "-"),
+            next_url=_login_next_url(err),
         ),
         err.status,
     )

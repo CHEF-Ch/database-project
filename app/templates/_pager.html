@@ -1,0 +1,12 @@
+{# 分页条（订单 / 我的订单 / 商品 / 库存 / 流水 / 补货单共用）。
+   调用方传入：rows（当前页渲染的行）、offset、limit、prev_url、next_url。
+   用法：{% with rows = orders %}{% include "_pager.html" %}{% endwith %} #}
+<p class="pager">
+  {% if rows %}
+    第 {{ offset + 1 }}—{{ offset + rows|length }} 条（每页 {{ limit }}）
+  {% else %}
+    共 0 条
+  {% endif %}
+  {% if prev_url %}<a class="btn" href="{{ prev_url }}">上一页</a>{% endif %}
+  {% if next_url %}<a class="btn" href="{{ next_url }}">下一页</a>{% endif %}
+</p>
