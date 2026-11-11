@@ -14,7 +14,11 @@
     <nav class="mainnav" aria-label="主导航">
       <a href="{{ url_for('main.index') }}"
          {% if request.endpoint == 'main.index' %}aria-current="page"{% endif %}>首页</a>
-      {% if 'product.read' in (perms or ()) %}
+      {# 顾客（能下单、但看不到全量订单）的「菜单」就是点单页本身：
+         不再单给一个只能看不能买的「商品」入口，避免"商品→返回→点单"的来回跳。
+         商品详情（配方/加料说明）仍可从点单页的商品名进入。 #}
+      {% set orderer_only = 'order.create' in (perms or ()) and 'order.read' not in (perms or ()) %}
+      {% if 'product.read' in (perms or ()) and not orderer_only %}
         <a href="{{ url_for('product.list_products') }}"
            {% if request.endpoint and request.endpoint.startswith('product.') %}aria-current="page"{% endif %}>商品</a>
       {% endif %}

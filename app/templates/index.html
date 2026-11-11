@@ -12,8 +12,10 @@
   </ul>
 
   <h2>可用入口</h2>
+  {# 顾客的菜单就是点单页：不再单独给「商品」卡片，避免"看菜单"与"点单"两个入口并存 #}
+  {% set orderer_only = 'order.create' in perms and 'order.read' not in perms %}
   <div class="cards">
-    {% if 'product.read' in perms %}
+    {% if 'product.read' in perms and not orderer_only %}
       <a class="card" href="{{ url_for('product.list_products') }}">商品</a>
     {% endif %}
     {% if 'inventory.read' in perms %}

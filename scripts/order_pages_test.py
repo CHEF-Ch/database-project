@@ -282,6 +282,16 @@ def run_read_cases(h: Harness) -> None:
     body = h.get("/orders/mine", 200, "顾客看我的订单")
     h.check_true("我的订单含 C0000001 的单", "202609160002" in body)
     h.check_true("我的订单不含 C0000002 的单", "202609160005" not in body)
+    # E1：顾客侧「商品」并入「点单」——导航无「商品」入口，但点单页可点开配方/加料说明
+    home = h.get("/", 200, "顾客首页")
+    nav = home.split('class="mainnav"')[1].split("</nav>")[0]
+    h.check_true("顾客导航不再有「商品」入口（菜单即点单页）",
+                 ">商品</a>" not in nav and "点单" in nav, nav[:120])
+    h.check_true("顾客仍可访问 /products/（保留 product.read 语义）",
+                 h.get("/products/", 200, "顾客商品列表") != "", "")
+    new_page = h.get("/orders/new", 200, "顾客点单页")
+    h.check_true("顾客点单页有「配方/加料」链接与菜单说明",
+                 "配方/加料" in new_page and "这里就是菜单" in new_page)
     h.get("/orders/202609160002", 200, "顾客看自己的单")
     body = h.get("/orders/202609160005", 404, "顾客看别人的单 → 404（IDOR）")
     h.check_true("越权详情页不含他人订单号", "202609160005" not in body)
