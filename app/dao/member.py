@@ -53,6 +53,22 @@ def get_coupon_rule(cur, coupon_rule_id: str) -> dict[str, Any] | None:
     return fetch_one(cur)
 
 
+def list_account_logs(cur, member_id: str, *, kind: str, offset: int = 0, limit: int = 21):
+    """Read a single member's ledger; table and column names are a fixed whitelist."""
+    if kind == "points":
+        table, columns, key = "member_point_log", "point_type, points", "point_log_id"
+    elif kind == "balance":
+        table, columns, key = "member_balance_log", "balance_type, amount", "balance_log_id"
+    else:
+        raise ValueError("Unknown ledger kind")
+    cur.execute(
+        f"SELECT {key}, {columns}, order_id, created_at FROM dbo.{table} "
+        f"WHERE member_id = ? ORDER BY created_at DESC, {key} DESC "
+        "OFFSET ? ROWS FETCH NEXT ? ROWS ONLY", member_id, offset, limit,
+    )
+    return rows_to_dicts(cur)
+
+
 def list_member_coupons(
     cur,
     member_id: str,

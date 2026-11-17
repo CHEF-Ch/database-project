@@ -38,6 +38,9 @@
         <a href="{{ url_for('order.my_orders') }}"
            {% if request.endpoint == 'order.my_orders' %}aria-current="page"{% endif %}>我的订单</a>
       {% endif %}
+      {% if role == 'customer' %}
+        <a href="{{ url_for('main.member_account') }}" {% if request.endpoint == 'main.member_account' %}aria-current="page"{% endif %}>我的账户</a>
+      {% endif %}
     </nav>
     <div class="userbox">
       {% if session.get('username') %}

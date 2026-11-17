@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% import "_display.html" as D %}
+{% block title %}我的账户 · MilkTeaShop{% endblock %}
+{% block content %}
+<h1>我的账户</h1>
+<p>会员编号：{{ account.member_id }}</p>
+<h2>当前积分：{{ account.points }} 分</h2>
+<h2>储值余额：¥{{ '%.2f'|format(account.balance) }}</h2>
+<p class="note">余额支付不重复累计消费积分。账户显示当前数据；本页仅供查询。</p>
+{% set point_labels = {'EARN_SALE':'消费赠送','EARN_RECHARGE':'充值赠送','REVERSAL':'退款冲正'} %}
+{% set balance_labels = {'RECHARGE':'充值','SPEND':'消费','REFUND':'退款退回'} %}
+<h2>积分流水</h2>
+<div class="table-wrap"><table class="table wide"><thead><tr><th>时间</th><th>类型</th><th>积分变化</th><th>关联订单</th></tr></thead><tbody>
+{% for row in points %}<tr><td>{{ D.dt(row.created_at) }}</td><td>{{ point_labels.get(row.point_type,row.point_type) }}</td><td>{{ '-' if row.point_type == 'REVERSAL' else '+' }}{{ row.points }}</td><td>{% if row.order_id %}<a href="{{ url_for('order.detail', order_id=row.order_id) }}">{{ row.order_id }}</a>{% else %}—{% endif %}</td></tr>
+{% else %}<tr><td colspan="4">暂无积分流水。</td></tr>{% endfor %}
+</tbody></table></div>
+<p>{% if points_prev %}<a href="{{ points_prev }}">积分上一页</a>{% endif %} {% if points_next %}<a href="{{ points_next }}">积分下一页</a>{% endif %}</p>
+<h2>储值流水</h2>
+<div class="table-wrap"><table class="table wide"><thead><tr><th>时间</th><th>类型</th><th>金额变化</th><th>关联订单</th></tr></thead><tbody>
+{% for row in balance %}<tr><td>{{ D.dt(row.created_at) }}</td><td>{{ balance_labels.get(row.balance_type,row.balance_type) }}</td><td>{{ '-' if row.balance_type == 'SPEND' else '+' }}¥{{ '%.2f'|format(row.amount) }}</td><td>{% if row.order_id %}<a href="{{ url_for('order.detail', order_id=row.order_id) }}">{{ row.order_id }}</a>{% else %}—{% endif %}</td></tr>
+{% else %}<tr><td colspan="4">暂无储值流水。</td></tr>{% endfor %}
+</tbody></table></div>
+<p>{% if balance_prev %}<a href="{{ balance_prev }}">储值上一页</a>{% endif %} {% if balance_next %}<a href="{{ balance_next }}">储值下一页</a>{% endif %}</p>
+{% endblock %}

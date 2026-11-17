@@ -118,6 +118,8 @@ GRANT SELECT ON dbo.shop_order         TO role_customer;   -- 我的订单（应
 GRANT SELECT ON dbo.order_item         TO role_customer;
 GRANT SELECT ON dbo.order_item_addon   TO role_customer;
 GRANT SELECT ON dbo.member_member      TO role_customer;   -- 自己的会员信息（应用层过滤）
+GRANT SELECT ON dbo.member_point_log   TO role_customer;   -- 我的积分流水（应用层按会员过滤）
+GRANT SELECT ON dbo.member_balance_log TO role_customer;   -- 我的储值流水（应用层按会员过滤）
 GRANT SELECT ON dbo.mkt_member_coupon  TO role_customer;   -- 自己的券（应用层按会员过滤）
 GO
 

@@ -6,7 +6,10 @@
 """
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, render_template
+from flask import Blueprint, jsonify, render_template, session
+from app.pages._paging import int_arg, page_url
+from app.services import member_service
+from app.services.permissions import role_required
 
 from app.services.health_service import probe
 from app.services.permissions import PERMISSIONS, ROLE_LABELS, current_role
@@ -35,3 +38,20 @@ def health():
     转成友好提示（细节只进后端日志）。
     """
     return jsonify(probe())
+
+
+@bp.get("/account")
+@role_required("order.read_own")
+def member_account():
+    points_offset = int_arg("points_offset", 0, low=0, high=10_000_000)
+    balance_offset = int_arg("balance_offset", 0, low=0, high=10_000_000)
+    account, points, balance = member_service.get_account(
+        session.get("member_id"), points_offset=points_offset, balance_offset=balance_offset,
+    )
+    return render_template(
+        "account.html", account=account, points=points[:20], balance=balance[:20],
+        points_prev=page_url("main.member_account", points_offset=max(0, points_offset-20)) if points_offset else None,
+        points_next=page_url("main.member_account", points_offset=points_offset+20) if len(points)>20 else None,
+        balance_prev=page_url("main.member_account", balance_offset=max(0, balance_offset-20)) if balance_offset else None,
+        balance_next=page_url("main.member_account", balance_offset=balance_offset+20) if len(balance)>20 else None,
+    )
