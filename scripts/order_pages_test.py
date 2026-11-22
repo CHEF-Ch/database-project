@@ -217,10 +217,15 @@ def run_read_cases(h: Harness) -> None:
     h.get("/orders/?date_from=2026-13-01", 400, "非法日期 E1001")
     h.get("/orders/?limit=abc", 400, "非法分页 E1001")
     page1 = h.get("/orders/?limit=2", 200, "分页正例：每页 2 条")
-    h.check_true("分页只渲染 limit 行", page1.count('href="/orders/2026') == 2, str(page1.count('href="/orders/2026')))
+    first_ids = re.findall(r'href="/orders/(\d{12})"', page1)
+    h.check_true("分页只渲染 limit 行", len(first_ids) == 2, str(first_ids))
     h.check_true("分页出现下一页链接（offset=2）", "offset=2" in page1)
     page2 = h.get("/orders/?limit=2&offset=2", 200, "分页第二页")
-    h.check_true("两页内容不同（偏移生效）", "202609160007" in page1 and "202609160007" not in page2)
+    second_ids = re.findall(r'href="/orders/(\d{12})"', page2)
+    expected = [row[0] for row in h.cur.execute(
+        "SELECT TOP (4) order_id FROM dbo.shop_order ORDER BY created_at DESC, order_id DESC"
+    ).fetchall()]
+    h.check_true("两页订单按时间顺序分页", len(expected) == 4 and first_ids + second_ids == expected)
     empty = h.get("/orders/?q=NOPE-NOT-EXIST", 200, "列表空态")
     h.check_true("空结果不显示“第 1—0 条”", "第 1—0 条" not in empty and "共 0 条" in empty)
     body = h.get("/orders/new", 200, "店员可下单")

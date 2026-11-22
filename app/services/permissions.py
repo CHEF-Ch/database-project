@@ -56,6 +56,7 @@ PERMISSIONS: dict[str, set[str]] = {
         "order.read",
         "order.refund",
         "coupon.write",
+        "report.sales.read",
     },
 }
 

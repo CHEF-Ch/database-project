@@ -1,14 +1,14 @@
 """首页与健康检查。
 
 /health 是 ① 的"运行环境自检"：只读探针，证明"配置 → 业务层 → DAO → SQL Server"
-这条纵向链路通了，并且连的是 v1.0（指纹 236）。探针逻辑放在业务层
+这条纵向链路通了，并核对数据库版本和结构。探针逻辑放在业务层
 （`app/services/health_service.py`），页面层不直接碰 DAO。
 """
 from __future__ import annotations
 
 from flask import Blueprint, jsonify, render_template, session
-from app.pages._paging import int_arg, page_url
-from app.services import member_service
+from app.pages._paging import date_arg, int_arg, page_url
+from app.services import member_service, report_service
 from app.services.permissions import role_required
 
 from app.services.health_service import probe
@@ -55,3 +55,10 @@ def member_account():
         balance_prev=page_url("main.member_account", balance_offset=max(0, balance_offset-20)) if balance_offset else None,
         balance_next=page_url("main.member_account", balance_offset=balance_offset+20) if len(balance)>20 else None,
     )
+
+
+@bp.get("/api/reports/sales")
+@role_required("report.sales.read")
+def sales_report():
+    report = report_service.sales_statistics(date_arg("date_from"), date_arg("date_to"))
+    return jsonify(report)

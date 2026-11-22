@@ -22,7 +22,12 @@ logger = logging.getLogger(__name__)
 
 # v1.0 目标结构指纹（第六周声明：111 列 + 17 主码 + 3 UQ + 4 筛选唯一索引 +
 # 25 外码 + 60 CHECK + 16 DEFAULT = 236）
-V1_FINGERPRINT = 236
+V1_SCHEMA_PARTS = {
+    "columns": 111, "pk": 17, "uq": 3, "uq_filtered": 4,
+    "fk": 25, "check": 60, "default": 16,
+}
+V1_FINGERPRINT = sum(V1_SCHEMA_PARTS.values())
+V21_SCHEMA_PARTS = {**V1_SCHEMA_PARTS, "columns": 114, "pk": 18, "fk": 27, "check": 61}
 
 _FINGERPRINT_SQL = """
 SELECT
@@ -128,12 +133,34 @@ def db_cursor(role: str | None = None, *, commit: bool = False) -> Iterator[pyod
             conn.close()
 
 
+def schema_version(cur) -> str:
+    cur.execute("""
+        SELECT CONVERT(nvarchar(20), value)
+        FROM sys.extended_properties
+        WHERE class = 0 AND name = N'milktea_schema_version'
+    """)
+    row = cur.fetchone()
+    version = row[0] if row else "1.0"
+    if version not in {"1.0", "2.0", "2.1"}:
+        raise AppError(ErrCode.DB_UNAVAILABLE, detail=f"Unsupported schema version: {version}")
+    return version
+
+
 def probe_database() -> dict:
     """只读探针：返回库名、版本与结构指纹（不返回任何连接信息）。"""
     with db_cursor(None) as cur:
         cur.execute(
             "SELECT DB_NAME() AS database_name, "
-            "CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(50)) AS product_version"
+            "CAST(SERVERPROPERTY('ProductVersion') AS nvarchar(50)) AS product_version, "
+            "(SELECT CONVERT(nvarchar(20), value) FROM sys.extended_properties "
+            "WHERE class = 0 AND name = N'milktea_schema_version') AS schema_version, "
+            "CASE WHEN OBJECT_ID('dbo.usp_sale_statistics', 'P') IS NOT NULL "
+            "AND OBJECT_ID('dbo.fn_sales_summary', 'IF') IS NOT NULL "
+            "AND OBJECT_ID('dbo.fn_replenish_qty', 'FN') IS NOT NULL "
+            "AND OBJECT_ID('dbo.usp_adjust_stock', 'P') IS NOT NULL "
+            "AND OBJECT_ID('dbo.fn_discount', 'FN') IS NOT NULL "
+            "THEN 1 ELSE 0 END AS v2_objects, "
+            "OBJECT_ID('dbo.order_material_usage', 'U') AS usage_table"
         )
         meta = cur.fetchone()
 
@@ -150,15 +177,24 @@ def probe_database() -> dict:
         "default": int(row.df),
     }
     total = sum(parts.values())
+    schema_version = meta.schema_version or "1.0"
+    # v2.0 ???????????????? v1.0 ?????
+    matches = (
+        (schema_version == "1.0" and parts == V1_SCHEMA_PARTS)
+        or (schema_version == "2.0" and parts == V1_SCHEMA_PARTS and meta.v2_objects == 1)
+        or (schema_version == "2.1" and parts == V21_SCHEMA_PARTS
+            and meta.v2_objects == 1 and meta.usage_table is not None)
+    )
     return {
         "ok": True,
         "database": meta.database_name,
         "server_version": meta.product_version,
         "auth_mode": Config.DB_AUTH,
+        "schema_version": schema_version,
         "fingerprint": {
             "total": total,
             "expected_v1_0": V1_FINGERPRINT,
-            "match": total == V1_FINGERPRINT,
+            "match": matches,
             **parts,
         },
     }

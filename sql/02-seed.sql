@@ -153,7 +153,7 @@ INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, 
 -- 单4 平台·美团·非会员(平台预收款，无 pay_method，接单即扣料)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
 ('202609160004', 'PLATFORM', NULL, 'COMPLETED', NULL, 'E0000001', 24.00, 0.00, 24.00, NULL, NULL, '2026-09-16 13:10:00', '2026-09-16 13:10:00', '2026-09-16 13:40:00', NULL, NULL);
--- 单5 到店·自助·会员·待支付(预占原料，不写流水)
+-- 单5 到店·自助·会员·待支付(预占原料，不写流水；v2.1 快照见 02-seed-v2-usage.sql)
 INSERT INTO shop_order (order_id, channel, order_mode, order_status, member_id, employee_id, item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no, created_at, paid_at, completed_at, refund_amount, refund_at) VALUES
 ('202609160005', 'COUNTER', 'COUNTER_SELF', 'PENDING', 'C0000002', 'E0000001', 13.00, 0.00, 13.00, NULL, NULL, '2026-09-16 14:00:00', NULL, NULL, NULL, NULL);
 -- 单6 到店·线上·整单退款(冲正积分)

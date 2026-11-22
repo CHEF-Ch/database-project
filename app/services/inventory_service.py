@@ -1,17 +1,16 @@
 """库存域业务层：库存查询、调整（GAIN/SHORT 流水）、补货创建与验收。
 
-事务边界说明：
-  · 调整库存 + 写 GAIN/SHORT 流水、验收 + 加库存 + 写 IN 流水，均已由 DAO
-    （``adjust_stock_with_log`` / ``receive_restock``）在同一游标内闭环；
-  · 本层只负责选连接角色（写走 ``stock``）、做基础校验，并把 DAO 的 None / 异常
-    翻译成统一错误码（404 / 409 E4001）。
+事务边界：
+  · v2 的库存调整使用应用写账户调用存储过程，过程负责库存和流水。
+  · v1 的库存调整与各版本的补货验收使用库存账户，DAO 在调用方事务内写入。
 """
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from app.dao import inventory as _inv
-from app.dao.connection import db_cursor
+from app.dao.connection import db_cursor, schema_version
+from app.services._decimal import decimal_input
 from app.errors import AppError, ErrCode
 from app.services.permissions import current_role
 
@@ -19,11 +18,7 @@ SUPPLIER_MAX = 100
 
 
 def _dec(value) -> Decimal:
-    """转成 DECIMAL(10,2) 数量；无法解析直接报参数错误。"""
-    try:
-        return Decimal(str(value)).quantize(Decimal("0.01"))
-    except (InvalidOperation, ValueError) as exc:
-        raise AppError(ErrCode.PARAM_INVALID, detail=f"数量不合法：{value!r}") from exc
+    return decimal_input(value, label="数量")
 
 
 def _non_zero_delta(value) -> Decimal:
@@ -97,24 +92,26 @@ def adjust_stock(material_id: str, delta, employee_id: str, log_type: str | None
     ``reserved_qty`` 时返回 409 E4001。
     """
     material_id = (material_id or "").strip()
-    if not material_id:
-        raise AppError(ErrCode.PARAM_INVALID, "缺少原料编号。")
+    if len(material_id) != 8 or not material_id.isascii():
+        raise AppError(ErrCode.PARAM_INVALID, "原料编号必须为 8 个 ASCII 字符。")
     change = _non_zero_delta(delta)
     eid = _require_employee(employee_id)
 
     with db_cursor("stock", commit=True) as cur:
-        if _inv.get_material(cur, material_id) is None:
-            raise AppError(ErrCode.NOT_FOUND)
-        result = _inv.adjust_stock_with_log(
-            cur,
-            material_id=material_id,
-            delta=change,
-            employee_id=eid,
-            log_type=log_type,
+        if schema_version(cur) == "1.0":
+            if _inv.get_material(cur, material_id) is None:
+                raise AppError(ErrCode.NOT_FOUND)
+            result = _inv.adjust_stock_with_log(
+                cur, material_id=material_id, delta=change, employee_id=eid, log_type=log_type,
+            )
+            if result is None:
+                raise AppError(ErrCode.BUSINESS_RULE, "调整后库存不足（低于预占量或为负）。")
+            return result
+
+    with db_cursor("app", commit=True) as cur:
+        return _inv.adjust_stock_v2(
+            cur, material_id=material_id, delta=change, employee_id=eid, log_type=log_type,
         )
-        if result is None:
-            raise AppError(ErrCode.BUSINESS_RULE, "调整后库存不足（低于预占量或为负）。")
-        return result
 
 
 def create_restock(supplier_name: str, employee_id: str, items) -> dict:

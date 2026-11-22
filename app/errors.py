@@ -108,6 +108,13 @@ def classify_db_error(exc: BaseException) -> AppError:
     numbers = set(_MSG_NUM_RE.findall(text))
     states = set(_SQLSTATE_RE.findall(text))
 
+    if numbers & {"51020", "51022", "51023"}:
+        return AppError(ErrCode.PARAM_INVALID, detail=text)
+    if "51024" in numbers:
+        return AppError(ErrCode.NOT_FOUND, detail=text)
+    if "51025" in numbers:
+        return AppError(ErrCode.BUSINESS_RULE, "调整后库存超出范围或低于预占量。", detail=text)
+
     if any(state.startswith("23") for state in states) or (numbers & _DB_CONSTRAINT_NUMS):
         return AppError(ErrCode.DB_CONSTRAINT, detail=text)
     if (numbers & _DB_TX_NUMS) or any(state.startswith("40") for state in states):

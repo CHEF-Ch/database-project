@@ -50,7 +50,8 @@ def init_csrf(app: Flask) -> None:
             return
         expected = session.get(SESSION_KEY)
         supplied = _supplied_token()
-        if expected and supplied and hmac.compare_digest(expected, supplied):
+        if (expected and supplied and supplied.isascii()
+                and hmac.compare_digest(expected, supplied)):
             return
         if not expected:
             app.logger.warning(

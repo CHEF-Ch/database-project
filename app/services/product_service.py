@@ -7,10 +7,11 @@
 """
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from app.dao import product as _product
 from app.dao.connection import db_cursor
+from app.services._decimal import decimal_input
 from app.errors import AppError, ErrCode
 from app.services.permissions import current_role
 
@@ -20,11 +21,7 @@ SALE_STATUSES = {"ON_SALE", "OFF_SHELF"}
 
 
 def _money(value) -> Decimal:
-    """转成 DECIMAL(10,2) 金额；无法解析直接报参数错误（不落库）。"""
-    try:
-        return Decimal(str(value)).quantize(Decimal("0.01"))
-    except (InvalidOperation, ValueError) as exc:
-        raise AppError(ErrCode.PARAM_INVALID, detail=f"价格不合法：{value!r}") from exc
+    return decimal_input(value, label="价格")
 
 
 def _clean_name(value) -> str:

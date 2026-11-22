@@ -38,7 +38,7 @@ from _csrf_client import make_client                                  # noqa: E4
 from app.config import Config                               # noqa: E402
 from app.services.permissions import PERMISSIONS, ROLE_LABELS  # noqa: E402
 
-# 规范矩阵（= docs/09 §8 的 5 角色 × 11 权限点）。代码里的 PERMISSIONS 一旦与它
+# 规范矩阵（= docs/09 §8 的 5 角色 × 12 权限点）。代码里的 PERMISSIONS 一旦与它
 # 不一致（多一格/少一格/拼写不同）都算 FAIL。
 SPEC: dict[str, set[str]] = {
     "clerk": {
@@ -53,7 +53,7 @@ SPEC: dict[str, set[str]] = {
     },
     "manager": {
         "product.read", "product.write", "inventory.read", "inventory.logs.read",
-        "order.read", "order.refund", "coupon.write",
+        "order.read", "order.refund", "coupon.write", "report.sales.read",
     },
 }
 
@@ -85,6 +85,7 @@ REPRESENTATIVE: dict[str, tuple[str, str] | None] = {
     "order.create": ("GET", "/orders/new"),
     "order.refund": ("POST", "/orders/1/refund"),
     "order.update_status": ("POST", "/orders/1/status"),
+    "report.sales.read": ("GET", "/api/reports/sales?date_from=2026-09-01&date_to=2026-09-30"),
     "coupon.write": None,
 }
 
@@ -160,7 +161,7 @@ def run_static_checks() -> tuple[list[tuple[str, str, str, str]], bool]:
             diffs.append(f"{role} 多 {sorted(code - spec)}")
     add(
         "矩阵逐格 == 规范矩阵",
-        "5 角色 × 11 权限点全一致",
+        "5 角色 × 12 权限点全一致",
         "一致" if not diffs else "；".join(diffs),
         not diffs,
     )
@@ -201,14 +202,14 @@ def _login(client, role: str) -> int:
 
 
 def db_available(client) -> bool:
-    """/health 探针：DB 可用且结构指纹与 v1.0 一致才返回 True。"""
+    """/health 探针：DB 可用且结构指纹与当前数据库版本一致才返回 True。"""
     try:
         resp = client.get("/health")
         if resp.status_code != 200:
             return False
         payload = resp.get_json() or {}
         fp = payload.get("fingerprint") or {}
-        return bool(fp.get("match")) and fp.get("total") == fp.get("expected_v1_0")
+        return bool(fp.get("match"))
     except Exception:
         return False
 
@@ -221,6 +222,7 @@ def run_behavior_checks(client) -> tuple[list[tuple[str, int, int, str, str]], b
     """
     rows: list[tuple[str, int, int, str, str]] = []
     allowed_ok = db_available(client)
+    schema = (client.get("/health").get_json() or {}).get("schema_version") if allowed_ok else None
 
     for perm in sorted(ALL_PERMS):
         rep = REPRESENTATIVE.get(perm)
@@ -243,9 +245,10 @@ def run_behavior_checks(client) -> tuple[list[tuple[str, int, int, str, str]], b
             elif method == "GET" and allowed_ok:
                 # 放行侧：只测 GET；POST 型端点不发起请求，避免真写库
                 resp = client.get(path)
+                expected = 409 if perm == "report.sales.read" and schema == "1.0" else 200
                 rows.append((
-                    f"{perm} × {role}（放行→200）", 200, resp.status_code,
-                    "PASS" if resp.status_code == 200 else "FAIL", f"{method} {path}",
+                    f"{perm} × {role}（放行→{expected}）", expected, resp.status_code,
+                    "PASS" if resp.status_code == expected else "FAIL", f"{method} {path}",
                 ))
             # 其余（granted 且 POST，或 GET 但 DB 不可用）：不请求、不断言
 
@@ -266,7 +269,7 @@ def render(static_rows, behavior_rows, allowed_ok, sql_mode) -> str:
     w(f"生成时间：{dt.datetime.now():%Y-%m-%d %H:%M:%S}")
     w(f"认证模式：DB_AUTH={'sql' if sql_mode else 'trusted'}　DB_NAME={Config.DB_NAME}")
     w("")
-    w("【1】规范矩阵（docs/09 §8 固化，5 角色 × 11 权限点）")
+    w("【1】规范矩阵（docs/09 §8 固化，5 角色 × 12 权限点）")
     w("-" * 96)
     for role in sorted(SPEC):
         w(f"  {role:<9}: {_fmt(SPEC[role])}")

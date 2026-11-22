@@ -135,6 +135,21 @@ def insert_order(
     return created
 
 
+def save_material_usage(cur, order_id: str, usages: Mapping[str, Decimal]) -> None:
+    cur.executemany(
+        "INSERT dbo.order_material_usage (order_id, material_id, qty) VALUES (?, ?, ?)",
+        [(order_id, material_id, qty) for material_id, qty in sorted(usages.items())],
+    )
+
+
+def get_material_usage(cur, order_id: str) -> dict[str, Decimal]:
+    cur.execute(
+        "SELECT material_id, qty FROM dbo.order_material_usage WHERE order_id = ?",
+        order_id,
+    )
+    return {row.material_id: row.qty for row in cur.fetchall()}
+
+
 def insert_order_item(
     cur,
     *,
@@ -315,7 +330,7 @@ def list_orders(
     if date_from:
         where.append("created_at >= ?")
         params.append(date_from)
-    if date_to:
+    if date_to is not None and date_to != date.max:
         # 传 date 时包含当天：< 次日 0 点；传 datetime 时按原值做 < 上界。
         if isinstance(date_to, date) and not isinstance(date_to, datetime):
             date_to = date_to + timedelta(days=1)

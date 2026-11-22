@@ -72,3 +72,23 @@ sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -i sql/app_login.sql
 
 对应关系：`login_clerk→role_cashier`、`login_customer→role_customer`（新建）、`login_maker→role_maker`、`login_stock→role_stock_keeper`、`login_manager→role_manager`。
 示例密码只在脚本里作为演示值；真实环境请改密码并通过 `DB_PWD_LOGIN_*` 环境变量注入。
+
+## 第十周 v2.1 验收库
+
+从仓库根目录运行。该脚本只接受 `MilkTeaShop_week10_` 前缀的新库名，使用种子脚本构建，同步部署 v2.0、v2.1 和待支付示例单的耗用快照。需要本机 SQL Server 上的建库和样例角色配置权限，SQL 认证回归还需启用混合认证。
+
+```powershell
+.\scripts\create_week10_acceptance_db.ps1 -Database MilkTeaShop_week10_review
+$env:DB_NAME = 'MilkTeaShop_week10_review'
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -d $env:DB_NAME -i scripts/week10_objects_test.sql
+python scripts/v2_usage_test.py
+python scripts/week10_app_test.py
+python scripts/week10_app_test.py --sql-roles
+python scripts/permission_matrix_test.py --sql-auth
+python scripts/order_pages_test.py
+python scripts/order_pages_test.py --sql-auth
+```
+
+部署选项、对象职责与历史待支付单的处理见 [功能补全与重构设计](../docs/10-数据库编程/功能补全与重构设计.md)。
+
+更新已有的 v2.1 **副本**时，可重新运行 `sql/migration_v2_0.sql` 更新过程、函数和对象授权，版本仍为 2.1。两个迁移入口均拒绝默认原应用库。

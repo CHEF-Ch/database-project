@@ -247,6 +247,20 @@ def add_stock_log(
     return int(fetch_scalar(cur))
 
 
+def adjust_stock_v2(
+    cur, *, material_id: str, delta: Decimal, employee_id: str, log_type: str | None
+) -> dict[str, Any]:
+    reason = log_type or ("GAIN" if delta > 0 else "SHORT")
+    cur.execute(
+        """
+        IF @@TRANCOUNT = 0 BEGIN TRANSACTION;
+        EXEC dbo.usp_adjust_stock @material_id = ?, @delta = ?, @reason = ?, @employee_id = ?;
+        """,
+        material_id, delta, reason, employee_id,
+    )
+    return get_material(cur, material_id)
+
+
 def adjust_stock_with_log(
     cur,
     *,

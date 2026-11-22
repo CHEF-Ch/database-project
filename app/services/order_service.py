@@ -12,30 +12,24 @@
   订单头 + 订单明细 + 加料明细 + 库存预占/确认/扣减 + SALE 流水
   + 券锁定/核销/退回 + 会员积分/余额快照与流水 + 平台订单信息。
 
-已知限制（docs/09 §10）：
-  · 配方/加料每份用量**没有下单时快照**；若下单后改配方，支付/取消会按**当前**配方
-    重算耗用量。三种后果（2026-10-28 交叉复核 P1-2 实测）：
-      ① 预占不够 → 订单**卡在 PENDING**，既付不了也取消不了（现报 E4001 并提示找管理员，
-         不再误报 E5003“请重试”）；
-      ② 配方变小 → 少扣/少释放，残留孤儿预占（可售虚低）；
-      ③ 配方变大但该原料有其它单预占兜底 → **静默多扣**，SALE 流水也跟着多记。
-    v1.0 不提供配方维护入口（商品页只改名称/杯型/价/状态），所以仅直接改库时触发；
-    v2.0 要在 ``order_item``（或新表 ``order_item_usage``）快照耗用量，且配方维护页必须
-    **禁止在有 PENDING 订单时改配方**。
+耗用快照：
+  · v2.1 下单时记录基础配方和加料的订单级耗用量。待支付单的支付与取消只读取该记录。
+  · v2.1 已存在的待支付单须核对历史耗用后再处理。未升级的数据库沿用 v1.0 的计算方式。
   · 订单号用 ``MAX+1`` + ``UPDLOCK/HOLDLOCK``，撞主码时重试；不使用 SEQUENCE。
 """
 from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from typing import Iterable
 
 from app.dao import inventory as _inv
 from app.dao import member as _member
 from app.dao import order as _order
 from app.dao import product as _product
-from app.dao.connection import db_cursor
+from app.dao.connection import db_cursor, schema_version
+from app.services._decimal import decimal_input
 from app.errors import AppError, ErrCode
 from app.services.permissions import current_role
 
@@ -89,17 +83,11 @@ def _status_label(status: str) -> str:
 
 
 def _money(value) -> Decimal:
-    try:
-        return Decimal(str(value)).quantize(Decimal("0.01"))
-    except (InvalidOperation, ValueError) as exc:
-        raise AppError(ErrCode.PARAM_INVALID, detail=f"金额不合法：{value!r}") from exc
+    return decimal_input(value, label="金额")
 
 
 def _rate(value) -> Decimal:
-    try:
-        return Decimal(str(value)).quantize(Decimal("0.0001"))
-    except (InvalidOperation, ValueError) as exc:
-        raise AppError(ErrCode.PARAM_INVALID, detail=f"费率不合法：{value!r}") from exc
+    return decimal_input(value, label="费率", precision=5, scale=4)
 
 
 def _text(value, *, label: str, max_len: int) -> str:
@@ -390,7 +378,12 @@ def _apply_coupon(
             f"还差 {_money(threshold - subtotal)} 元。",
             detail=f"未达到券门槛：{subtotal} < {threshold}",
         )
-    return _money(coupon["discount_amount"]), coupon
+    discount = _money(coupon["discount_amount"])
+    if schema_version(cur) in {"2.0", "2.1"}:
+        discount = _member.calculate_discount(cur, subtotal, threshold, discount)
+        if discount is None:
+            raise AppError(ErrCode.BUSINESS_RULE, "优惠券规则无效，请联系店长。")
+    return discount, coupon
 
 
 def _usages_for_items(cur, items: list[dict]) -> dict[str, Decimal]:
@@ -419,6 +412,20 @@ def _usages_for_items(cur, items: list[dict]) -> dict[str, Decimal]:
 def _is_order_id_collision(exc: AppError) -> bool:
     """只对订单主码冲突重试，不吞其它约束错误。"""
     return exc.code == ErrCode.DB_CONSTRAINT and "PK_shop_order" in (exc.detail or "")
+
+
+def _pending_order_usage(cur, order_id: str) -> dict[str, Decimal]:
+    if schema_version(cur) != "2.1":
+        detail = _order.get_order_detail(cur, order_id)
+        return _usages_for_items(cur, detail["items"])
+
+    usages = _order.get_material_usage(cur, order_id)
+    if not usages:
+        raise AppError(
+            ErrCode.BUSINESS_RULE,
+            "这张历史订单缺少原料耗用记录，请联系店长核对后再处理。",
+        )
+    return usages
 
 
 def _points(total: Decimal) -> int:
@@ -551,6 +558,9 @@ def _create_order_tx(
                 qty=addon["qty"],
                 addon_price=addon["addon_price"],
             )
+
+    if schema_version(cur) == "2.1":
+        _order.save_material_usage(cur, order_id, usages)
 
     if channel == "PLATFORM":
         platform = context["platform"]
@@ -690,8 +700,7 @@ def pay_order(
                 created_at=paid_at,
             )
 
-        detail = _order.get_order_detail(cur, order_id)
-        usages = _usages_for_items(cur, detail["items"])
+        usages = _pending_order_usage(cur, order_id)
         _inv.confirm_order_stock(
             cur,
             order_id=order_id,
@@ -760,8 +769,7 @@ def cancel_order(
                 detail=f"订单状态 {order['order_status']} 不能取消（已付款请走退款）",
             )
 
-        detail = _order.get_order_detail(cur, order_id)
-        usages = _usages_for_items(cur, detail["items"])
+        usages = _pending_order_usage(cur, order_id)
         if not _order.cancel_order_with_stock(cur, order_id, usages):
             raise AppError(ErrCode.BUSINESS_RULE, "订单状态已变化，取消失败。")
 
@@ -892,6 +900,9 @@ def list_orders(
     ``order.read``，顾客进不来；顾客走 ``/orders/mine``（member_id 来自 session）。
     """
     role = _read_role(role)
+    if date_from is not None and date_to is not None and date_from > date_to:
+        raise AppError(ErrCode.PARAM_INVALID, "开始日期不能晚于结束日期。")
+
     with db_cursor(role) as cur:
         if role == "customer":
             if not member_id:

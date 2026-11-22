@@ -25,6 +25,13 @@ JOIN dbo.mkt_coupon_rule AS r ON r.coupon_rule_id = mc.coupon_rule_id
 """
 
 
+def calculate_discount(
+    cur, subtotal: Decimal, threshold: Decimal, discount: Decimal
+) -> Decimal | None:
+    cur.execute("SELECT dbo.fn_discount(?, ?, ?)", subtotal, threshold, discount)
+    return fetch_scalar(cur)
+
+
 def _dec(value: Decimal | int | float | str) -> Decimal:
     return Decimal(str(value)).quantize(Decimal("0.01"))
 

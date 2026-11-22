@@ -8,10 +8,27 @@ from datetime import date, datetime
 from typing import Any
 
 from app.dao._utils import (
+    fetch_one,
     normalise_limit,
     normalise_offset,
     rows_to_dicts,
 )
+
+
+def sales_statistics(cur, date_from: date, date_to: date) -> dict[str, Any]:
+    cur.execute(
+        """
+        SET NOCOUNT ON;
+        DECLARE @orders BIGINT, @qty BIGINT, @sales DECIMAL(38,2), @refund DECIMAL(38,2);
+        EXEC dbo.usp_sale_statistics ?, ?, @orders OUTPUT, @qty OUTPUT, @sales OUTPUT, @refund OUTPUT;
+        SELECT @orders AS order_count, @qty AS sold_qty,
+               @sales AS sales_amount, @refund AS refund_amount;
+        """,
+        date_from, date_to,
+    )
+    products = rows_to_dicts(cur)
+    cur.nextset()
+    return {"totals": fetch_one(cur), "products": products}
 
 
 def product_sales_summary(
