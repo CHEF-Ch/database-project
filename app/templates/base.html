@@ -34,7 +34,10 @@
         <a href="{{ url_for('order.list_orders') }}"
            {% if request.endpoint == 'order.list_orders' %}aria-current="page"{% endif %}>订单</a>
       {% endif %}
-      {% if 'order.read_own' in (perms or ()) %}
+      {# 「我的订单」只给顾客：店员虽有 order.read_own（供订单详情页二选一放行），
+         但账号不绑会员，/orders/mine 只会返回空态，入口对店员无意义，故只按顾客角色显隐。
+         后端路由仍各自校验 order.read_own（隐藏只是体验控制）。 #}
+      {% if role == 'customer' %}
         <a href="{{ url_for('order.my_orders') }}"
            {% if request.endpoint == 'order.my_orders' %}aria-current="page"{% endif %}>我的订单</a>
       {% endif %}

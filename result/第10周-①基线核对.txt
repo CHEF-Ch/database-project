@@ -1,0 +1,56 @@
+==========================================================================================
+第 10 周 ① 基线核对证据：v1.0 结构指纹 + 表行数 + 受限登录权限（只读）
+==========================================================================================
+生成时间：2026-11-22 16:10:31
+连接：DB_AUTH=trusted  DB_NAME=MilkTeaShop_v01  DB_SERVER=.\SQLEXPRESS
+
+【1】结构指纹（与 /health 同口径，第六周声明 v1.0 = 236）
+------------------------------------------------------------------------------------------
+列 111 + 主码 17 + UQ 3 + 筛选唯一索引 4 + 外码 25 + CHECK 60 + DEFAULT 16 = 236
+期望 236，匹配：是
+
+【2】全部用户表行数（样例数据核对）
+------------------------------------------------------------------------------------------
+  inv_restock              2
+  inv_restock_item         5
+  inv_stock_log            36
+  item_addon_option        9
+  item_material            8
+  item_product             5
+  item_recipe              23
+  member_balance_log       4
+  member_member            3
+  member_point_log         4
+  mkt_coupon_rule          2
+  mkt_member_coupon        3
+  order_item               12
+  order_item_addon         3
+  order_platform           1
+  shop_order               7
+  staff_employee           4
+  共 17 张表，合计 131 行
+
+【3】受限登录 / 数据库用户（是否存在）
+------------------------------------------------------------------------------------------
+  login_app                SQL_USER
+  login_clerk              SQL_USER
+  login_customer           SQL_USER
+  login_maker              SQL_USER
+  login_manager            SQL_USER
+  login_stock              SQL_USER
+  role_customer            DATABASE_ROLE
+  缺失：无
+
+【4】角色成员关系（用户 → 数据库角色）
+------------------------------------------------------------------------------------------
+  login_app                → role_app
+  login_clerk              → role_cashier
+  login_customer           → role_customer
+  login_maker              → role_maker
+  login_manager            → role_manager
+  login_stock              → role_stock_keeper
+
+【5】结论
+------------------------------------------------------------------------------------------
+PASS：指纹 236、17 张表、业务登录齐全
+==========================================================================================
