@@ -1,4 +1,4 @@
-"""R02 regression. Run against a v2.1 test copy using Windows authentication."""
+﻿"""R02 regression. Run against a v2.1 or v2.2 test copy using Windows authentication."""
 from uuid import uuid4
 
 from order_pages_test import Harness
@@ -10,7 +10,7 @@ def main() -> None:
         assert h.one(
             "SELECT CONVERT(nvarchar(20), value) FROM sys.extended_properties "
             "WHERE class = 0 AND name = N'milktea_schema_version'"
-        ) == "2.1"
+        ) in {"2.1", "2.2"}
         h.cur.execute("UPDATE dbo.item_material SET stock_qty = reserved_qty + 5000")
         h.login("customer1")
         form = {
@@ -95,7 +95,7 @@ def main() -> None:
         assert before == {material: (h.stock(material), h.reserved(material)) for material in initial}
         failures = [row for row in h.rows if row[3] != "PASS"]
         assert not failures, failures
-        print("PASS: v2.1 snapshot payment, cancellation, completion and inventory isolation")
+        print("PASS: v2 snapshot payment, cancellation, completion and inventory isolation")
     finally:
         h.close()
 

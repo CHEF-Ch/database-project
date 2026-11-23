@@ -296,7 +296,10 @@ def run_read_cases(h: Harness) -> None:
                  h.get("/products/", 200, "顾客商品列表") != "", "")
     new_page = h.get("/orders/new", 200, "顾客点单页")
     h.check_true("顾客点单页有「配方/加料」链接与菜单说明",
-                 "配方/加料" in new_page and "这里就是菜单" in new_page)
+                 "/products/P0000001" in new_page and "饮品菜单" in new_page
+                 and len(re.findall(r'<details class="menu-group" data-name="珍珠奶茶"', new_page)) == 1
+                 and bool(re.search(r'data-name="珍珠奶茶"[^>]*>.*?qty\.P0000001.*?qty\.P0000002.*?</details>',
+                                    new_page, re.S)))
     h.get("/orders/202609160002", 200, "顾客看自己的单")
     body = h.get("/orders/202609160005", 404, "顾客看别人的单 → 404（IDOR）")
     h.check_true("越权详情页不含他人订单号", "202609160005" not in body)

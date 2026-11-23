@@ -1,11 +1,13 @@
 """认证：用户存储接口与两种实现。
 
 v1.0 用配置内 demo 账号（ConfigUserStore）；
-v2.0 新建 app_user 表后切换为 DbUserStore，业务代码不需要改动。
+v2.2 使用 app_user，并保留配置账号模式供旧版库使用。
 """
 from __future__ import annotations
 
 from werkzeug.security import check_password_hash
+
+from app.dao import user
 
 from app.demo_users import DEMO_USERS
 
@@ -49,24 +51,18 @@ class ConfigUserStore(UserStore):
 
 
 class DbUserStore(UserStore):
-    """v2.0：从 dbo.app_user 表校验（表尚未创建，此处为接口预留）。"""
+    """从数据库读取有效账号及其业务身份。"""
 
     def verify(self, username: str, password: str) -> dict | None:
-        from app.dao.connection import db_cursor
-
-        with db_cursor("manager") as cur:
-            cur.execute(
-                "SELECT password_hash, role_code, member_id, display_name "
-                "FROM dbo.app_user WHERE username = ? AND is_active = 1",
-                username,
-            )
-            row = cur.fetchone()
-
-        if row is None or not check_password_hash(row.password_hash, password):
+        if not username or len(username.encode("utf-16-le")) > 60:
+            return None
+        record = user.find_active(username)
+        if record is None or not check_password_hash(record["password_hash"], password):
             return None
         return {
-            "username": username,
-            "role": row.role_code,
-            "display": row.display_name or username,
-            "member_id": row.member_id,
+            "username": record["username"],
+            "role": record["role_code"],
+            "display": record["display_name"] or record["username"],
+            "member_id": record["member_id"],
+            "employee_id": record["employee_id"],
         }

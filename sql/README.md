@@ -92,3 +92,18 @@ python scripts/order_pages_test.py --sql-auth
 部署选项、对象职责与历史待支付单的处理见 [功能补全与重构设计](../docs/10-数据库编程/功能补全与重构设计.md)。
 
 更新已有的 v2.1 **副本**时，可重新运行 `sql/migration_v2_0.sql` 更新过程、函数和对象授权，版本仍为 2.1。两个迁移入口均拒绝默认原应用库。
+
+## v2.2 数据库账号
+
+在隔离的 v2.1 副本上执行。迁移创建账号表和只读凭据查询过程，并保留 v2.1 订单快照能力。
+
+```powershell
+$env:DB_NAME = 'MilkTeaShop_week10_review'
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -d $env:DB_NAME -i sql/migration_v2_2_app_user.sql
+python scripts/seed_app_users.py
+python scripts/v2_app_user_test.py
+$env:USER_STORE = 'db'
+python run.py
+```
+
+演示账号导入可选。脚本只复制现有密码哈希，保留已存在账号的密码、角色和停用状态；请用具备写账号表权限的管理连接执行。SQL 认证模式下，服务器使用已配置的 `login_manager` 调用凭据查询过程，普通业务角色无权查询账号表。用户停用后再次登录会被拒绝；已有会话的失效策略由 S02 处理。

@@ -118,6 +118,32 @@ def _orderable_products() -> list[dict]:
     return products
 
 
+# Menu families are explicit so renames or matching names cannot regroup unrelated SKUs.
+_MENU_FAMILY = {"P0000001": "pearl-milk-tea", "P0000002": "pearl-milk-tea"}
+_MENU_SIZE_ORDER = {"SMALL": 0, "MEDIUM": 1, "LARGE": 2}
+
+
+def _menu_groups(products: list[dict], form) -> list[dict]:
+    groups = {}
+    for product in products:
+        pid = product["product_id"]
+        key = _MENU_FAMILY.get(pid, pid)
+        groups.setdefault(key, []).append(product)
+    return [
+        {
+            "name": variants[0]["name"],
+            "variants": sorted(variants, key=lambda p: _MENU_SIZE_ORDER.get(p["size"], 3)),
+            "min_price": min(p["unit_price"] for p in variants),
+            "max_price": max(p["unit_price"] for p in variants),
+            "expanded": bool(form and any(
+                form.get(f'qty.{p["product_id"]}{suffix}', "") not in ("", "0")
+                for p in variants for suffix in ("", ".2", ".3", ".4", ".5", ".6")
+            )),
+        }
+        for variants in groups.values()
+    ]
+
+
 def _customer_only_member(role: str | None) -> str | None:
     """下单页的会员号：顾客只能来自 session；店员可用 URL 上的 ``member_id``（用于列该会员的券）。"""
     if role == "customer":
@@ -383,7 +409,7 @@ def _form_context(
         else []
     )
     return {
-        "products": products,
+        "menu_groups": _menu_groups(products, form),
         "coupons": coupons,
         "member_id": member_id or "",
         "is_customer": (role == "customer"),

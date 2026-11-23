@@ -28,6 +28,7 @@ V1_SCHEMA_PARTS = {
 }
 V1_FINGERPRINT = sum(V1_SCHEMA_PARTS.values())
 V21_SCHEMA_PARTS = {**V1_SCHEMA_PARTS, "columns": 114, "pk": 18, "fk": 27, "check": 61}
+V22_SCHEMA_PARTS = {**V21_SCHEMA_PARTS, "columns": 121, "pk": 19, "fk": 29, "check": 63, "default": 17}
 
 _FINGERPRINT_SQL = """
 SELECT
@@ -141,7 +142,7 @@ def schema_version(cur) -> str:
     """)
     row = cur.fetchone()
     version = row[0] if row else "1.0"
-    if version not in {"1.0", "2.0", "2.1"}:
+    if version not in {"1.0", "2.0", "2.1", "2.2"}:
         raise AppError(ErrCode.DB_UNAVAILABLE, detail=f"Unsupported schema version: {version}")
     return version
 
@@ -160,7 +161,10 @@ def probe_database() -> dict:
             "AND OBJECT_ID('dbo.usp_adjust_stock', 'P') IS NOT NULL "
             "AND OBJECT_ID('dbo.fn_discount', 'FN') IS NOT NULL "
             "THEN 1 ELSE 0 END AS v2_objects, "
-            "OBJECT_ID('dbo.order_material_usage', 'U') AS usage_table"
+            "OBJECT_ID('dbo.order_material_usage', 'U') AS usage_table, "
+            "CASE WHEN OBJECT_ID('dbo.app_user', 'U') IS NOT NULL "
+            "AND OBJECT_ID('dbo.usp_find_app_user', 'P') IS NOT NULL "
+            "THEN 1 ELSE 0 END AS user_store"
         )
         meta = cur.fetchone()
 
@@ -178,12 +182,13 @@ def probe_database() -> dict:
     }
     total = sum(parts.values())
     schema_version = meta.schema_version or "1.0"
-    # v2.0 ???????????????? v1.0 ?????
     matches = (
         (schema_version == "1.0" and parts == V1_SCHEMA_PARTS)
         or (schema_version == "2.0" and parts == V1_SCHEMA_PARTS and meta.v2_objects == 1)
         or (schema_version == "2.1" and parts == V21_SCHEMA_PARTS
             and meta.v2_objects == 1 and meta.usage_table is not None)
+        or (schema_version == "2.2" and parts == V22_SCHEMA_PARTS
+            and meta.v2_objects == 1 and meta.usage_table is not None and meta.user_store == 1)
     )
     return {
         "ok": True,

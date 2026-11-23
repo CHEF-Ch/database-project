@@ -2,9 +2,14 @@
 {% block title %}订单 · MilkTeaShop{% endblock %}
 
 {% block content %}
-<h1>订单</h1>
+<div class="page-heading">
+  <h1>订单</h1>
+  {% if 'order.create' in perms %}
+    <a class="btn primary" href="{{ url_for('order.new_order') }}">新建订单</a>
+  {% endif %}
+</div>
 
-<form method="get" class="form inline">
+<form method="get" class="form inline order-filters" aria-label="筛选订单">
   <label>状态
     <select name="status">
       <option value="">全部</option>
@@ -27,18 +32,19 @@
   <label>会员号
     <input name="member_id" value="{{ filters.member_id }}" placeholder="如 C0000001">
   </label>
-  <label>起
+  <label>开始日期
     <input name="date_from" type="date" value="{{ filters.date_from }}">
   </label>
-  <label>止
+  <label>结束日期
     <input name="date_to" type="date" value="{{ filters.date_to }}">
   </label>
-  <button class="btn" type="submit">筛选</button>
+  <div class="filter-actions">
+    <button class="btn" type="submit">筛选</button>
+    {% if filters.status or filters.channel or filters.q or filters.member_id or filters.date_from or filters.date_to %}
+      <a href="{{ url_for('order.list_orders') }}">清除筛选</a>
+    {% endif %}
+  </div>
 </form>
-
-{% if 'order.create' in perms %}
-  <p><a class="btn primary" href="{{ url_for('order.new_order') }}">新建订单</a></p>
-{% endif %}
 
 {% with show_member = True %}
   {% include "orders/_table.html" %}

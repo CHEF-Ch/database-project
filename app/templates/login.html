@@ -23,19 +23,20 @@
   {# 会话过期时带上原路径，登录成功直接回去（路由侧有白名单校验） #}
   {% if next_url %}<input type="hidden" name="next" value="{{ next_url }}">{% endif %}
   <label>用户名
-    <input name="username" maxlength="30" required autofocus
+    <input name="username" maxlength="30" autocomplete="username" required autofocus
            value="{{ (form.get('username') if form else '') or '' }}"
            {% if 'username' in bad %}aria-invalid="true"{% endif %}>
     {% if fe.get('username') %}<span class="field-error">{{ fe['username'] }}</span>{% endif %}
   </label>
   <label>密码
-    <input name="password" type="password" maxlength="128" required
+    <input name="password" type="password" autocomplete="current-password" maxlength="128" required
            {% if 'password' in bad %}aria-invalid="true"{% endif %}>
     {% if fe.get('password') %}<span class="field-error">{{ fe['password'] }}</span>{% endif %}
   </label>
   <button class="btn primary" type="submit">登录</button>
 </form>
 
+{% if accounts %}
 <h2>演示账号</h2>
 <table class="table">
   <thead><tr><th scope="col">用户名</th><th scope="col">角色</th></tr></thead>
@@ -45,5 +46,6 @@
     {% endfor %}
   </tbody>
 </table>
-<p class="note">密码见 README「演示账号」表；代码中只保存密码哈希。</p>
+<p class="note">密码见 README「演示账号」表。</p>
+{% endif %}
 {% endblock %}

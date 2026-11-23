@@ -33,32 +33,33 @@
 {% endif %}
 
 {% if is_customer %}
-  <p class="banner note">
-    <strong>这里就是菜单</strong>：在要点的商品那一行填杯数即可（可加料、选糖冰温；同款不同配料点「＋ 同款再加一行」），
-    点商品名旁的「配方/加料」可看配方说明。<br>
-    顾客自助点单：会员号取自登录账号（不可更改），提交后订单为<strong>待支付</strong>，
-    支付确认在订单详情页完成；不能创建平台单、不能指定经办员工或金额。
-  </p>
-{% else %}
-  <p class="note">
-    收银台下单：现金当场结清（直接已支付），线上/余额先挂单待支付；
-    会员号留空即非会员单。金额一律由服务端按主数据重算。
-  </p>
+<p class="note">展开饮品选择杯型、数量和加料。提交后可在订单详情页支付。</p>
 {% endif %}
 
 <form method="post" action="{{ url_for('order.create_order') }}" id="order-form">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <h2>选择饮品</h2>
-  <div class="table-wrap">
+  <div class="menu-heading">
+    <h2>饮品菜单</h2>
+    <label class="menu-search" hidden>搜索饮品 <input type="search" id="menu-search" placeholder="输入饮品名称"></label>
+  </div>
+  <p class="note" id="menu-empty" hidden>没有匹配的饮品。</p>
+  {% for group in menu_groups %}
+  <details class="menu-group" data-name="{{ group.name }}"{% if group.expanded %} open{% endif %}>
+    <summary>
+      <strong>{{ group.name }}</strong>
+      <span class="menu-sizes">{% for p in group.variants %}<span>{{ D.SIZE_LABELS.get(p.size, p.size) }}</span>{% endfor %}</span>
+      <span class="menu-price">¥{{ group.min_price }}{% if group.max_price != group.min_price %}–{{ group.max_price }}{% endif %}</span>
+    </summary>
+    <div class="table-wrap">
   <table class="table wide order-form">
     <thead>
-      <tr><th scope="col">商品</th><th scope="col">单价</th><th scope="col">杯数</th><th scope="col">糖度</th><th scope="col">冰量</th><th scope="col">温度</th><th scope="col">加料（份数）</th></tr>
+      <tr><th scope="col">杯型</th><th scope="col">单价</th><th scope="col">杯数</th><th scope="col">糖度</th><th scope="col">冰量</th><th scope="col">温度</th><th scope="col">加料（份数）</th></tr>
     </thead>
     <tbody>
       {# 每个商品最多 6 行（与 order_routes.MAX_VARIANT_ROWS 一致）：
          第 1 行字段名不带后缀，第 2 行起 ``.2``/``.3``…
          提交失败时**逐行回填**（含第 2 行起），否则页面说"已保留填写内容"却只留第 1 行。 #}
-      {% for p in products %}
+      {% for p in group.variants %}
         {% for n in range(1, 7) %}
           {% set sfx = '' if n == 1 else '.' ~ n %}
           {% set raw_qty = form.get('qty.' ~ p.product_id ~ sfx) if form else None %}
@@ -69,7 +70,10 @@
           {% set v_temp = (form.get('temp.' ~ p.product_id ~ sfx, 'COLD') if form else 'COLD') or 'COLD' %}
           <tr class="product-row" data-pid="{{ p.product_id }}">
             <td>
-              <code>{{ p.product_id }}</code> {{ p.name }} <span class="note">{{ D.SIZE_LABELS.get(p.size, p.size) }}</span>
+              <strong>{{ D.SIZE_LABELS.get(p.size, p.size) }}</strong>
+              {% if not is_customer %}<code>{{ p.product_id }}</code>{% endif %}
+              <a class="recipe-link" href="{{ url_for('product.detail', product_id=p.product_id) }}"
+                 target="_blank" rel="noopener" aria-label="{{ p.name }} {{ D.SIZE_LABELS.get(p.size, p.size) }} 配方和加料（新标签页）">配方/加料 ↗</a>
               <span class="variant-label">{% if n > 1 %}（同款第 {{ n }} 行）{% endif %}</span>
               <div class="variant-actions">
                 {# 只有第 1 行给"加行"按钮，避免克隆出成排的按钮 #}
@@ -80,13 +84,17 @@
                 <button type="button" class="btn tiny js-remove-variant"{% if n == 1 %} hidden{% endif %}>删除本行</button>
               </div>
             </td>
-            <td>{{ p.unit_price }}</td>
-            <td>
+            <td data-label="单价">¥{{ p.unit_price }}</td>
+            <td data-label="杯数">
+              <div class="quantity-control">
+              <button type="button" class="btn tiny js-quantity-step" data-step="-1" aria-label="减少一杯" hidden>−</button>
               <input class="qty" type="number" name="qty.{{ p.product_id }}{{ sfx }}"
                      min="0" max="99" step="1" value="{{ v_qty }}" data-price="{{ p.unit_price }}"
                      aria-label="{{ p.name }} {{ D.SIZE_LABELS.get(p.size, p.size) }}{% if n > 1 %}第 {{ n }} 行{% endif %} 杯数">
+              <button type="button" class="btn tiny js-quantity-step" data-step="1" aria-label="增加一杯" hidden>＋</button>
+              </div>
             </td>
-            <td>
+            <td data-label="糖度">
               <select name="sugar.{{ p.product_id }}{{ sfx }}"
                       aria-label="{{ p.name }}{% if n > 1 %}第 {{ n }} 行{% endif %} 糖度">
                 {% for code, label in sugars.items() %}
@@ -94,7 +102,7 @@
                 {% endfor %}
               </select>
             </td>
-            <td>
+            <td data-label="冰量">
               <select name="ice.{{ p.product_id }}{{ sfx }}"
                       aria-label="{{ p.name }}{% if n > 1 %}第 {{ n }} 行{% endif %} 冰量">
                 {% for code, label in ices.items() %}
@@ -102,7 +110,7 @@
                 {% endfor %}
               </select>
             </td>
-            <td>
+            <td data-label="温度">
               <select name="temp.{{ p.product_id }}{{ sfx }}"
                       aria-label="{{ p.name }}{% if n > 1 %}第 {{ n }} 行{% endif %} 温度">
                 {% for code, label in temps.items() %}
@@ -110,7 +118,7 @@
                 {% endfor %}
               </select>
             </td>
-            <td>
+            <td data-label="加料">
               {% for a in p.addons %}
                 {% set v_addon = (form.get('addon.' ~ p.product_id ~ '.' ~ a.material_id ~ sfx, '0') if form else '0') or '0' %}
                 <label class="check">
@@ -126,17 +134,15 @@
           </tr>
           {% endif %}
         {% endfor %}
-      {% else %}
-      <tr><td colspan="7" class="note">当前没有在售商品，无法下单。</td></tr>
       {% endfor %}
     </tbody>
   </table>
-  </div>
-  <p class="note">
-    杯数填 0 表示不点这一款；加料按“份”单独计价，不随杯数翻倍（与业务层口径一致）。
-    同款商品要不同糖度/冰量/加料时，点「＋ 同款再加一行」加成两行（每行一个口味组合）；
-    要不同杯型请直接选对应的另一款商品。
-  </p>
+    </div>
+  </details>
+  {% else %}
+    <p class="note">当前没有在售商品。</p>
+  {% endfor %}
+  <p class="note">加料按份计价。相同杯型需要不同口味时，可再加一行。</p>
 
   <h2>下单信息</h2>
   <div class="form">
@@ -228,12 +234,14 @@
     {% endif %}
   </div>
 
-  <p>
-    券前预估合计：¥<strong id="preview" aria-live="polite">0.00</strong>
-    <span id="preview-discount" class="note"></span>
-    <span class="note">（仅填写参考；服务端按主数据重算，客户端金额一律不采信）</span>
-  </p>
-  <button class="btn primary" type="submit" id="order-submit">提交订单</button>
+  <div class="order-checkout">
+    <div>
+      <span id="cup-count" class="note"></span>
+      <span>券前预估 <strong>¥<span id="preview" aria-live="polite">0.00</span></strong></span>
+      <span id="preview-discount" class="note"></span>
+    </div>
+    <button class="btn primary" type="submit" id="order-submit">提交订单</button>
+  </div>
 </form>
 
 <p>
@@ -298,6 +306,10 @@
   function update() {
     var total = subtotal();
     out.textContent = total.toFixed(2);
+    var cups = Array.from(form.querySelectorAll('input.qty')).reduce(function (sum, input) {
+      return sum + Math.max(0, num(input));
+    }, 0);
+    document.getElementById('cup-count').textContent = cups + ' 杯 · ';
     syncCoupons(total);
   }
   form.addEventListener('input', update);
@@ -333,17 +345,14 @@
     );
   }
   function baseName(name) { return name.replace(/\.\d+$/, ''); }   // 只剥我们加的 ".2/.3"
-  /* 行号取"当前最大后缀 + 1"，不能用行数：
-     删掉中间行后行数会与最大后缀脱节，用行数当后缀会生成**重名**字段，
-     而服务端 request.form.get() 只取第一个同名值 → 新加的那一行被静默丢弃。 */
   function nextIndex(pid) {
-    var max = 0;
-    rowsOf(pid).forEach(function (tr) {
-      var q = tr.querySelector('input.qty');
-      var m = q && q.name.match(/\.(\d+)$/);
-      if (m) { max = Math.max(max, parseInt(m[1], 10)); }
-    });
-    return max + 1;
+    var used = new Set(rowsOf(pid).map(function (tr) {
+      var suffix = tr.querySelector('input.qty').name.match(/\.(\d+)$/);
+      return suffix ? Number(suffix[1]) : 1;
+    }));
+    for (var i = 2; i <= MAX_ROWS; i++) {
+      if (!used.has(i)) { return i; }
+    }
   }
   function refresh(pid) {
     var rows = rowsOf(pid);
@@ -376,6 +385,7 @@
       });
       src.insertAdjacentElement('afterend', clone);
       refresh(pid);
+      clone.querySelector("input.qty").focus();
       return;
     }
     var rmBtn = ev.target.closest('.js-remove-variant');
@@ -387,6 +397,8 @@
       if (rowsOf(pid2)[0] === tr) { return; }   // 第 1 行不给删（就是这一款本身）
       tr.remove();
       refresh(pid2);
+      rowsOf(pid2)[0].querySelector(".js-add-variant").focus();
+      form.dispatchEvent(new Event("input", {bubbles: true}));
     }
   });
   Array.prototype.forEach.call(form.querySelectorAll('tr.product-row'), function (tr) {
@@ -403,11 +415,46 @@
   if (!channel || !box) { return; }
   function sync() {
     var on = channel.value === 'PLATFORM';
-    box.style.opacity = on ? '1' : '.55';
+    box.hidden = !on;
     box.querySelectorAll('input, select').forEach(function (el) { el.disabled = !on; });
   }
   channel.addEventListener('change', sync);
   sync();
+})();
+
+(function () {
+  var form = document.getElementById('order-form');
+  var search = document.getElementById('menu-search');
+  var groups = Array.from(form.querySelectorAll('.menu-group'));
+  if (groups.length > 1) { search.closest('label').hidden = false; }
+  search.addEventListener('input', function () {
+    var term = search.value.trim().toLocaleLowerCase();
+    groups.forEach(function (group) {
+      group.hidden = !group.dataset.name.toLocaleLowerCase().includes(term);
+    });
+    document.getElementById('menu-empty').hidden = groups.some(function (group) {
+      return !group.hidden;
+    });
+  });
+  form.querySelectorAll('.js-quantity-step').forEach(function (button) { button.hidden = false; });
+  form.addEventListener('click', function (event) {
+    var button = event.target.closest('.js-quantity-step');
+    if (!button) { return; }
+    var input = button.parentElement.querySelector('input.qty');
+    input.value = Math.max(0, Math.min(99, (Number(input.value) || 0) + Number(button.dataset.step)));
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+  });
+  form.addEventListener('invalid', function (event) {
+    var group = event.target.closest('.menu-group');
+    if (group) {
+      group.hidden = false;
+      group.open = true;
+      if (search.value) {
+        search.value = '';
+        search.dispatchEvent(new Event('input'));
+      }
+    }
+  }, true);
 })();
 </script>
 {% endblock %}
