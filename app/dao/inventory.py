@@ -51,6 +51,22 @@ def _positive(value: Decimal | int | float | str, *, label: str = "数量") -> D
     return result
 
 
+def set_employee_context(cur, employee_id: str | None) -> None:
+    """把经办员工写进会话上下文，供库存审计触发器（v2.3）记录操作人。
+
+    触发器读 ``SESSION_CONTEXT(N'employee_id')``；缺失时退回数据库登录名，
+    所以这里传空值也要显式清掉，避免连接复用时把上一位员工的编号带过去。
+    """
+    value = (employee_id or "").strip()
+    if not value:
+        cur.execute("EXEC sys.sp_set_session_context @key = N'employee_id', @value = NULL")
+        return
+    cur.execute(
+        "EXEC sys.sp_set_session_context @key = N'employee_id', @value = ?",
+        value,
+    )
+
+
 def list_materials(
     cur,
     *,
@@ -251,6 +267,7 @@ def adjust_stock_v2(
     cur, *, material_id: str, delta: Decimal, employee_id: str, log_type: str | None
 ) -> dict[str, Any]:
     reason = log_type or ("GAIN" if delta > 0 else "SHORT")
+    set_employee_context(cur, employee_id)
     cur.execute(
         """
         IF @@TRANCOUNT = 0 BEGIN TRANSACTION;
@@ -291,6 +308,7 @@ def adjust_stock_with_log(
     if log_type == "SHORT" and change > 0:
         raise AppError(ErrCode.PARAM_INVALID, detail="SHORT 流水的调整量必须为负")
 
+    set_employee_context(cur, employee_id)
     if adjust_stock(cur, material_id, change) != 1:
         return None
     add_stock_log(
@@ -366,6 +384,7 @@ def confirm_order_stock(
     重复调用时，已存在 SALE 流水的原料直接跳过；不会二次扣减库存或重复记账。
     任一原料确认失败即抛 E4001，由业务层回滚。
     """
+    set_employee_context(cur, employee_id)
     for material_id in sorted(usages):
         cur.execute(
             """
@@ -407,6 +426,7 @@ def deduct_order_stock(
     created_at: datetime | None = None,
 ) -> bool:
     """直接扣减订单耗用并写 SALE 流水（现金单/平台单），以 SALE 流水做幂等键。"""
+    set_employee_context(cur, employee_id)
     for material_id in sorted(usages):
         cur.execute(
             """
@@ -595,6 +615,7 @@ def receive_restock(
     if cur.rowcount != 1:
         return None
 
+    set_employee_context(cur, employee_id)
     for item in list_restock_items(cur, restock_id):
         if adjust_stock(cur, item["material_id"], item["qty"]) != 1:
             raise AppError(

@@ -379,7 +379,7 @@ def _apply_coupon(
             detail=f"未达到券门槛：{subtotal} < {threshold}",
         )
     discount = _money(coupon["discount_amount"])
-    if schema_version(cur) in {"2.0", "2.1", "2.2"}:
+    if schema_version(cur) in {"2.0", "2.1", "2.2", "2.3"}:
         discount = _member.calculate_discount(cur, subtotal, threshold, discount)
         if discount is None:
             raise AppError(ErrCode.BUSINESS_RULE, "优惠券规则无效，请联系店长。")
@@ -415,7 +415,7 @@ def _is_order_id_collision(exc: AppError) -> bool:
 
 
 def _pending_order_usage(cur, order_id: str) -> dict[str, Decimal]:
-    if schema_version(cur) not in {"2.1", "2.2"}:
+    if schema_version(cur) not in {"2.1", "2.2", "2.3"}:
         detail = _order.get_order_detail(cur, order_id)
         return _usages_for_items(cur, detail["items"])
 
@@ -559,7 +559,7 @@ def _create_order_tx(
                 addon_price=addon["addon_price"],
             )
 
-    if schema_version(cur) in {"2.1", "2.2"}:
+    if schema_version(cur) in {"2.1", "2.2", "2.3"}:
         _order.save_material_usage(cur, order_id, usages)
 
     if channel == "PLATFORM":

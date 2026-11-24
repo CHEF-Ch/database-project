@@ -1,6 +1,6 @@
 # 数据库大作业
 
-> 一个真实经营场景贯穿 17 周的关系数据库项目。当前阶段：第二阶段 v1.0（第 5—9 周：ER 模型 → 规范化与迁移 → Web 应用）。
+> 一个真实经营场景贯穿 17 周的关系数据库项目。当前阶段：第三阶段 v2.0（第 10—13 周）。第 10 周过程/函数与第 11 周触发器、窗口查询已实现并实跑，待第二人复核；事务与并发（第 12—13 周）未开始。
 
 ## 项目简介
 
@@ -56,7 +56,12 @@
 │   ├── _csrf_client.py        # 测试侧：客户端自动补 CSRF 令牌（make_client / raw_client）
 │   ├── create_test_db.sql     # ⑦ I 组并发沙箱 MilkTeaShop_test（COPY_ONLY 还原，源库只读）
 │   ├── smoke_test.py          # ⑦的雏形：骨架用例 + 错误分类 + 真实启动，可写证据
-│   └── verify_db_logins.py    # ⑦的雏形：5 个业务登录（不含 login_app）的数据库级权限正/反例
+│   ├── verify_db_logins.py    # ⑦的雏形：5 个业务登录（不含 login_app）的数据库级权限正/反例
+│   ├── create_week11_acceptance_db.ps1 # 第十一周：从种子建 v2.3 验收库（可 -StopBeforeAudit）
+│   ├── week11_baseline_check.py        # 第十一周①：v2.2 基线与对象清单（只读）
+│   ├── week11_trigger_test.sql         # 第十一周⑤：审计/完成触发器 18 组
+│   ├── week11_window_test.sql          # 第十一周⑥：窗口查询 5 组
+│   └── week11_app_test.py              # 第十一周⑦：应用链路 + 触发器 + 窗口口径
 ├── sql/
 │   ├── 00-create.sql          # 删库重建（先 DROP 后 CREATE），使脚本回到空库起点
 │   ├── 01-schema.sql          # 建表（字段/非空/默认值）
@@ -68,6 +73,11 @@
 │   ├── role.sql               # 角色与权限（v0.1）
 │   ├── app_login.sql          # 第七至九周：v1.0 上的受限登录 + 顾客角色 + 授权补缺
 │   ├── migration.sql          # 第六周：v0.1 → v1.0 结构迁移（副本上执行）
+│   ├── procedure.sql          # 第十周：销售统计、库存调整两个过程
+│   ├── function.sql           # 第十周：补货量、销售汇总、折扣三个函数
+│   ├── trigger.sql            # 第十一周：库存审计、订单完成规则两个触发器
+│   ├── window_query.sql       # 第十一周：排名 / 累计 / 3 日移动平均
+│   ├── migration_v2_3_audit.sql # 第十一周：v2.2 → v2.3（审计表 + 触发器 + 窗口函数）
 │   └── regression.sql         # 第六周：迁移后回归测试
 └── result/                    # 实际运行验证证据（sqlcmd 输出 / 自检输出 / 应用界面截图，索引见 result/README.md）
 ```
@@ -165,6 +175,32 @@ python scripts/integration_test.py --write --concurrency --real-server --repro  
 
 演示账号（clerk1 / customer1 / maker1 / stock1 / manager1）见结构文档 §7。
 
+### 第十周 v2 对象与第十一周 v2.3 触发器
+
+第十周在 v1.0 副本上部署两过程三函数（`sql/migration_v2_0.sql`），第十一周在其上继续 v2.1 耗用快照、
+v2.2 账号表与 v2.3 审计/触发器。一键建验收库（从种子建到 v2.3）：
+
+```powershell
+.\scripts\create_week11_acceptance_db.ps1 -Database MilkTeaShop_week11_acceptance
+$env:DB_NAME = 'MilkTeaShop_week11_acceptance'
+$env:DB_DRIVER = 'ODBC Driver 17 for SQL Server'   # 按本机已装驱动调整
+
+# 第十一周测试（证据写入 result/）
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -d $env:DB_NAME -i scripts/week11_trigger_test.sql -o "result/第11周-⑤触发器测试.txt"
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -d $env:DB_NAME -i scripts/week11_window_test.sql  -o "result/第11周-⑥窗口查询验证.txt"
+python scripts/week11_app_test.py --write
+```
+
+`/health` 应返回 `schema_version = 2.3`、`fingerprint.total = 271`、`match = true`。
+库存审计写入 `inv_stock_audit`（与业务流水 `inv_stock_log` 分离）；订单完成只允许 `MAKING → COMPLETED`
+且必须有 `SALE` 扣料证据，不会二次扣库。设计与规则见
+[`docs/10-数据库编程/触发器与窗口查询设计.md`](docs/10-数据库编程/触发器与窗口查询设计.md)，
+进度见 [`docs/06-进度/第十一周任务流程与状态.md`](docs/06-进度/第十一周任务流程与状态.md)。
+
+> 本机若仍只有 Windows 认证（`LoginMode=1`），受限 SQL 登录分支无法复跑；请先以管理员运行
+> `scripts/enable-mixed-auth.ps1` 并重启 SQL Server 服务，再执行 `--sql-auth` 轮。
+> 触发器内 `THROW` 会使事务不可提交，应用会整体回滚；手工测试请按 `sql/README.md` 的说明为每个反例单独开事务。
+
 ## 提交入口
 
 | 材料 | 文件 |
@@ -177,6 +213,8 @@ python scripts/integration_test.py --write --concurrency --real-server --repro  
 | 第五周：ER 模型（ER 图、映射清单、问题清单） | `docs/07-ER模型/` |
 | 第六周：范式化与迁移 / 回归 | `docs/08-规范化/`、`sql/migration.sql`、`sql/regression.sql` |
 | 第七至九周：Web 应用（分层、登录、角色权限） | `app/`、`run.py`、`requirements.txt`、`scripts/`、`sql/app_login.sql`、`docs/09-应用开发/`（结构与运行、操作手册、测试用例） |
+| 第十周：过程与函数 | `sql/procedure.sql`、`sql/function.sql`、`sql/migration_v2_0.sql`、`docs/10-数据库编程/过程与函数设计.md`、`result/第10周-*` |
+| 第十一周：触发器与窗口查询 | `sql/trigger.sql`、`sql/window_query.sql`、`sql/migration_v2_3_audit.sql`、`docs/10-数据库编程/触发器与窗口查询设计.md`、`scripts/week11_*`、`result/第11周-*` |
 | 结果目录（证据与截图） | `result/`（索引：`result/README.md`；界面截图 `result/fig/web-01 … web-15`） |
 | 阶段报告 | `docs/03-阶段报告.md` |
 | AI 使用记录 | `docs/04-AI使用记录/`（按成员分子目录） |

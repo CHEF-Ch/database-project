@@ -16,6 +16,10 @@
 | `migration.sql` | 第六周：v0.1 → v1.0 结构迁移（在副本 `MilkTeaShop_v01` 上执行，源库不动） | 否——对已迁移库重跑会报"对象已存在" |
 | `regression.sql` | 第六周：迁移后回归（业务基准 / 口径 / 指纹 / 约束反例 / 角色权限） | 是 |
 | `app_login.sql` | 第七至九周：在 **v1.0 副本**上建 5 个业务 SQL 登录 + `login_app` 写事务账户 + 新建 `role_customer`（可自助下单）与 `role_app` + 补齐授权缺口 + 统计视图授权 + **把 `role_cashier` 对 `shop_order` 的 UPDATE 收窄为 8 列**（退款列仅店长可写） | 是（幂等） |
+| `procedure.sql` / `function.sql` | 第十周：两过程三函数（销售统计、库存调整、补货量、销售汇总、折扣） | 是（`CREATE OR ALTER`） |
+| `migration_v2_3_audit.sql` | 第十一周：v2.2 → v2.3，建 `inv_stock_audit`、部署触发器与窗口函数、授权 | 是（幂等，需 v2.2） |
+| `trigger.sql` | 第十一周：库存审计触发器 + 订单完成规则触发器 | 是（`CREATE OR ALTER`） |
+| `window_query.sql` | 第十一周：三类窗口查询函数（排名 / 累计 / 3 日移动平均）+ 演示查询 | 是（`CREATE OR ALTER`） |
 
 > **`00-create.sql` 为什么必须先删再建**：`01-schema.sql`、`02-seed.sql`、`constraint.sql` **都只能在空库上跑**（表已存在会报错、数据重复会撞约束）。若 `00` 只在库不存在时创建，那么第二次复现就会失败——它必须**每次都把库恢复成空的**。这是"复现"与"重跑不报错"的区别。
 > 阶段一（1—4 周）不涉及真实数据，删库重建没有损失；`DROP` 前会先 `SET SINGLE_USER WITH ROLLBACK IMMEDIATE` 断开占用连接。
@@ -107,3 +111,32 @@ python run.py
 ```
 
 演示账号导入可选。脚本只复制现有密码哈希，保留已存在账号的密码、角色和停用状态；请用具备写账号表权限的管理连接执行。SQL 认证模式下，服务器使用已配置的 `login_manager` 调用凭据查询过程，普通业务角色无权查询账号表。用户停用后再次登录会被拒绝；已有会话的失效策略由 S02 处理。
+
+## 第十一周 v2.3 审计触发器与窗口查询
+
+在 v2.2 副本上执行 `sql/migration_v2_3_audit.sql`：新建 `inv_stock_audit`（审计与业务流水分离）、部署
+`trg_item_material_audit` / `trg_shop_order_complete`、三个窗口查询函数，并授予 `role_app` / `role_stock_keeper`
+写审计、`role_manager` / `role_stock_keeper` 读审计。版本标记 **2.3**，健康检查指纹 **271**。
+
+```powershell
+$env:DB_NAME = 'MilkTeaShop_week11_acceptance'
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -d $env:DB_NAME -i sql/migration_v2_3_audit.sql
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -d $env:DB_NAME -i scripts/week11_trigger_test.sql -o result/第11周-⑤触发器测试.txt
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -d $env:DB_NAME -i scripts/week11_window_test.sql  -o result/第11周-⑥窗口查询验证.txt
+python scripts/week11_app_test.py --write
+```
+
+验收库可从种子一键建到 2.3：
+
+```powershell
+.\scripts\create_week11_acceptance_db.ps1 -Database MilkTeaShop_week11_acceptance
+```
+
+加 `-StopBeforeAudit` 只建到 v2.2，用于复跑 ① 基线核对（`scripts/week11_baseline_check.py`）。
+
+> **手动 DML 的 SET 选项**：`inv_stock_audit` 含 `PERSISTED` 计算列 `change_qty`，`shop_order` 等表含筛选唯一索引。
+> 用 sqlcmd 手工改这些表前先 `SET QUOTED_IDENTIFIER ON; SET ANSI_NULLS ON;`，否则报 Msg 1934。
+> 应用经 ODBC 连接默认满足该选项；项目内 SQL 脚本已在开头写死。
+
+> **触发器报错的事务行为**：触发器内 `THROW` 会把当前事务标记为不可提交（`XACT_STATE=-1`），由调用方整体回滚。
+> 应用 `db_cursor(commit=True)` 会走回滚分支；测试脚本对每个预期失败用例单独开事务并在捕获后 `ROLLBACK`。

@@ -1,0 +1,53 @@
+﻿== 0. 对象存在性 ==
+PASS 0.1 inv_stock_audit 与两个触发器已部署
+== 1. 审计：单条插入 ==
+PASS 1 插入记 0 → 10、change_qty=10、INSERT
+== 2. 审计：单条修改 ==
+PASS 2 修改记 10 → 15、change_qty=5
+== 3. 审计：一条语句改多行 ==
+PASS 3 多行 UPDATE → 3 条审计、行间对应正确
+== 4. 审计：仅改 reserved_qty 不记审计 ==
+PASS 4 仅改 reserved_qty → 0 条审计
+== 5. 审计：删除原料 ==
+PASS 5 删除记 10 → 0、change_qty=-10
+== 6. 审计：操作人（会话上下文 vs 登录回退） ==
+PASS 6 会话上下文 → SESSION/E0000001；无上下文 → LOGIN 回退
+== 7. 审计：role_customer 预占不被审计表权限拦住 ==
+PASS 7 role_customer 只改 reserved_qty：放行且 0 审计
+== 7b. 受限账户 login_app / login_stock 写库存：审计权限 + 员工校验 ==
+PASS 7b 受限账户 login_app / login_stock 写库存成功且审计记 SESSION 员工
+== 8. 审计触发器不重复写业务流水 ==
+PASS 8 审计只写 inv_stock_audit，不新增业务流水
+== 9. 完成：合法 MAKING → COMPLETED ==
+PASS 9 合法完成：状态与完成时间正确
+== 9b. 完成：role_app（login_app）执行完成通过触发器 ==
+PASS 9b login_app 完成订单：触发器在受限账户下可执行
+== 10. 完成：重复完成被拒（51111） ==
+  caught 51111：订单已完成，不能重复完成或重写完成时间。
+PASS 10 重复完成（重写 completed_at）→ 51111
+== 10b. 完成：已完成单的 no-op 状态更新放行（权限矩阵用） ==
+PASS 10b SET order_status=order_status 放行，不误伤权限矩阵
+== 11. 完成：PENDING 直接完成被拒（51112） ==
+  caught 51112：只有「制作中」的订单可以完成；非法状态不能直接转为已完成。
+PASS 11 非 MAKING 来源 → 51112
+== 12. 完成：金额与明细/加料快照不一致被拒（51116） ==
+  caught 51116：订单金额与明细/加料快照不一致，不能完成。
+PASS 12 subtotal ≠ 商品+加料 → 51116
+== 13. 完成：无明细被拒（51114） ==
+  caught 51114：订单没有任何明细，不能完成。
+PASS 13 无明细 → 51114
+== 14. 完成：无 SALE 扣料证据被拒（51117） ==
+  caught 51117：该订单没有支付扣料流水（SALE），不能完成；请先核对支付与库存。
+PASS 14 无 SALE 扣料 → 51117
+== 15. 完成：完成时间缺失被拒（51113） ==
+  caught 51113：完成时间缺失或早于支付时间，订单不能完成。
+PASS 15 缺 completed_at → 51113
+== 16. 完成：一条语句同时完成两单 ==
+PASS 16 多行 UPDATE：两单同时完成
+== 17. 完成：合法 + 非法混合，事务不可提交并整体回滚 ==
+  caught 51114：订单没有任何明细，不能完成。
+PASS 17 合法+非法混合：事务不可提交、回滚后两单仍 MAKING（无部分提交）
+== 18. 完成：商品改杯型后历史订单仍可完成 ==
+PASS 18 历史订单按明细快照完成，不因商品改杯型被拒
+ 
+ALL TRIGGER TESTS PASSED（18 组主用例，另有 7b/9b/10b 受限账户与 no-op 子用例；审计 8 组 / 完成 10 组）

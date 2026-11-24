@@ -29,6 +29,8 @@ V1_SCHEMA_PARTS = {
 V1_FINGERPRINT = sum(V1_SCHEMA_PARTS.values())
 V21_SCHEMA_PARTS = {**V1_SCHEMA_PARTS, "columns": 114, "pk": 18, "fk": 27, "check": 61}
 V22_SCHEMA_PARTS = {**V21_SCHEMA_PARTS, "columns": 121, "pk": 19, "fk": 29, "check": 63, "default": 17}
+# v2.3：+inv_stock_audit（9 物理列 + 1 计算列 +1 PK +3 CHECK +1 DEFAULT），外码不变
+V23_SCHEMA_PARTS = {**V22_SCHEMA_PARTS, "columns": 131, "pk": 20, "check": 66, "default": 18}
 
 _FINGERPRINT_SQL = """
 SELECT
@@ -142,7 +144,7 @@ def schema_version(cur) -> str:
     """)
     row = cur.fetchone()
     version = row[0] if row else "1.0"
-    if version not in {"1.0", "2.0", "2.1", "2.2"}:
+    if version not in {"1.0", "2.0", "2.1", "2.2", "2.3"}:
         raise AppError(ErrCode.DB_UNAVAILABLE, detail=f"Unsupported schema version: {version}")
     return version
 
@@ -164,7 +166,11 @@ def probe_database() -> dict:
             "OBJECT_ID('dbo.order_material_usage', 'U') AS usage_table, "
             "CASE WHEN OBJECT_ID('dbo.app_user', 'U') IS NOT NULL "
             "AND OBJECT_ID('dbo.usp_find_app_user', 'P') IS NOT NULL "
-            "THEN 1 ELSE 0 END AS user_store"
+            "THEN 1 ELSE 0 END AS user_store, "
+            "CASE WHEN OBJECT_ID('dbo.inv_stock_audit', 'U') IS NOT NULL "
+            "AND OBJECT_ID('dbo.trg_item_material_audit', 'TR') IS NOT NULL "
+            "AND OBJECT_ID('dbo.trg_shop_order_complete', 'TR') IS NOT NULL "
+            "THEN 1 ELSE 0 END AS audit_objects"
         )
         meta = cur.fetchone()
 
@@ -189,6 +195,9 @@ def probe_database() -> dict:
             and meta.v2_objects == 1 and meta.usage_table is not None)
         or (schema_version == "2.2" and parts == V22_SCHEMA_PARTS
             and meta.v2_objects == 1 and meta.usage_table is not None and meta.user_store == 1)
+        or (schema_version == "2.3" and parts == V23_SCHEMA_PARTS
+            and meta.v2_objects == 1 and meta.usage_table is not None
+            and meta.user_store == 1 and meta.audit_objects == 1)
     )
     return {
         "ok": True,

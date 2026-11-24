@@ -56,6 +56,30 @@
 > **文件名里的「第N周」取实际开始周**，与 `docs/06` §二 的计划周次不完全一致：④⑤⑥ 计划列在第八周，
 > 实际启动于 10-25 前后，故沿用 `第7周-` 前缀；⑦ 按第八周命名。归档时以本节为准。
 
+## 第十、十一周证据索引（v2.x 对象与 v2.3 触发器）
+
+| 步骤 | 证据文件 | 生成命令 | 关键数字 |
+| --- | --- | --- | --- |
+| 第10周 ① | `第10周-①基线核对.txt` | `python scripts/week10_baseline_check.py --write` | v1.0 指纹 236、17 表、6 个业务登录 |
+| 第10周 ④ | `第10周-④对象测试.txt` | `sqlcmd … -i scripts/week10_objects_test.sql` | 两过程三函数正常/边界/非法输入 |
+| 第10周 ⑥ | `第10周-⑥应用回归.txt`、`第10周-⑥交叉复核.md` | `python scripts/week10_app_test.py` | 应用专项通过；交叉复核人待填 |
+| 第11周 ① | `第11周-①基线核对.txt` | `python scripts/week11_baseline_check.py --write`（`DB_NAME=MilkTeaShop_week11_pre`） | v2.2 指纹 **256**、19 表、触发器 0、审计表不存在 |
+| 第11周 ⑤ | `第11周-⑤触发器测试.txt` | `sqlcmd … -i scripts/week11_trigger_test.sql` | **18 组主用例 PASS**（审计 8 + 完成 10；另有 7b/9b/10b 受限账户与 no-op 子用例） |
+| 第11周 ⑥ | `第11周-⑥窗口查询验证.txt` | `sqlcmd … -i scripts/week11_window_test.sql` | **5 组 PASS**（排名/累计/移动平均/边界/口径） |
+| 第11周 ⑦ | `第11周-⑦应用回归.txt` | `python scripts/week11_app_test.py --write` | 下单→支付→制作→完成、审计、库存调整、统计口径全 PASS |
+| 第11周 ⑦ | `第11周-⑦订单页面回归.txt` | `python scripts/order_pages_test.py`（v2.3 验收库） | **147/147**，触发器启用后原页面链路无回归 |
+| 第11周 ⑦ | `第11周-⑦交叉复核.md` | 第二人填写 | 待签核，故 ⑦ 仍为“待复核” |
+
+> **验收库**：`scripts/create_week11_acceptance_db.ps1 -Database MilkTeaShop_week11_acceptance` 从种子一键建到 v2.3
+> （指纹 271）。`-StopBeforeAudit` 只建到 v2.2，用于复跑 ① 的迁移前基线。
+>
+> **本轮环境限制**：本机 SQL Server 当前 `LoginMode=1`（仅 Windows 认证），SQL 登录分支未能重跑；
+> ⑤ 用 `EXECUTE AS USER` 验证了 `role_customer` 预占与审计表权限，⑦ 以 trusted 运行。开启混合认证并重启服务后
+> 应补跑 `--sql-auth` 轮，再把结果并入 ⑦。
+>
+> **触发器报错事务不可提交**：`THROW` 后 `XACT_STATE=-1`；⑤ 的「混合合法/非法」用例先提交夹具，
+> 再在独立事务里失败、回滚、核对两单仍为 `MAKING`。引用「整体回滚」时按这个口径说，不要写成「单条语句回滚」。
+
 ## 历史证据按周归档
 
 > 上表只列**当前口径**（引用/答辩以它为准）。本节登记其余文件：它们不是废件，而是各周的原始证据与复核记录——
