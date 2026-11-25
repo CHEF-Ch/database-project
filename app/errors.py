@@ -114,6 +114,11 @@ def classify_db_error(exc: BaseException) -> AppError:
         return AppError(ErrCode.NOT_FOUND, detail=text)
     if "51025" in numbers:
         return AppError(ErrCode.BUSINESS_RULE, "调整后库存超出范围或低于预占量。", detail=text)
+    if "51201" in numbers:
+        return AppError(ErrCode.DB_UNAVAILABLE, detail=text)
+    if numbers & {"51111", "51112", "51113", "51114", "51115", "51116", "51117",
+                  "51202", "51203", "51204"}:
+        return AppError(ErrCode.BUSINESS_RULE, detail=text)
 
     if any(state.startswith("23") for state in states) or (numbers & _DB_CONSTRAINT_NUMS):
         return AppError(ErrCode.DB_CONSTRAINT, detail=text)

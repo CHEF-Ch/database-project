@@ -640,6 +640,21 @@ def receive_restock(
     return result
 
 
+def receive_restock_transaction(cur, restock_id: str, employee_id: str) -> dict[str, Any] | None:
+    """执行 v2.4 验收过程，再读取提交前的单据与明细。"""
+    cur.execute(
+        "EXEC dbo.usp_receive_restock @restock_id = ?, @employee_id = ?",
+        restock_id,
+        employee_id,
+    )
+    if fetch_scalar(cur, 0) != 1:
+        return None
+    result = get_restock(cur, restock_id)
+    assert result is not None
+    result["items"] = list_restock_items(cur, restock_id)
+    return result
+
+
 def list_restocks(cur, *, limit: int | None = 100, offset: int | None = 0) -> list[dict[str, Any]]:
     """补货单列表（按创建时间倒序，供验收页展示）。"""
     cur.execute(

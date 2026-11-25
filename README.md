@@ -1,6 +1,6 @@
 # 数据库大作业
 
-> 一个真实经营场景贯穿 17 周的关系数据库项目。当前阶段：第三阶段 v2.0（第 10—13 周）。第 10 周过程与函数已完成验收并收口；第 11 周触发器、窗口查询和应用回归已完成并收口；事务与并发（第 12—13 周）未开始。
+> 一个真实经营场景贯穿 17 周的关系数据库项目。当前阶段：第三阶段 v2.0（第 10—13 周）。第 10 周过程与函数已完成验收并收口；第 11 周触发器、窗口查询和应用回归已完成并收口；第 12 周递归与业务事务已完成，第 13 周并发实验待开展。
 
 ## 项目简介
 
@@ -201,6 +201,21 @@ python scripts/week11_app_test.py --write
 > `scripts/enable-mixed-auth.ps1` 并重启 SQL Server 服务，再执行 `--sql-auth` 轮。
 > 触发器内 `THROW` 会使事务不可提交，应用会整体回滚；手工测试请按 `sql/README.md` 的说明为每个反例单独开事务。
 
+### 第十二周递归查询与 v2.4 事务
+
+从仓库根目录新建独立验收库，然后升级并运行专项脚本。
+
+```powershell
+.\scripts\create_week11_acceptance_db.ps1 -Database MilkTeaShop_week11_week12
+$testDb = 'MilkTeaShop_week11_week12'
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -d $testDb -i sql/migration_v2_4_transactions.sql
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -W -d $testDb -i sql/recursive_query.sql
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -W -d $testDb -i scripts/week12_transaction_test.sql
+```
+
+将应用的 `DB_NAME` 指向 v2.4 库后，制作员完成订单和库管验收入库自动使用数据库过程。
+健康检查应报告 v2.4、指纹 271 且匹配。回归步骤和事务职责见 [SQL 运行说明](sql/README.md)。
+
 ## 提交入口
 
 | 材料 | 文件 |
@@ -215,6 +230,7 @@ python scripts/week11_app_test.py --write
 | 第七至九周：Web 应用（分层、登录、角色权限） | `app/`、`run.py`、`requirements.txt`、`scripts/`、`sql/app_login.sql`、`docs/09-应用开发/`（结构与运行、操作手册、测试用例） |
 | 第十周：过程与函数 | `sql/procedure.sql`、`sql/function.sql`、`sql/migration_v2_0.sql`、`docs/10-数据库编程/过程与函数设计.md`、`result/第10周-*` |
 | 第十一周：触发器与窗口查询 | `sql/trigger.sql`、`sql/window_query.sql`、`sql/migration_v2_3_audit.sql`、`docs/10-数据库编程/触发器与窗口查询设计.md`、`scripts/week11_*`、`result/第11周-*` |
+| 第十二周：递归查询与业务事务 | `sql/recursive_query.sql`、`sql/order_transaction.sql`、`sql/restock_transaction.sql`、`sql/migration_v2_4_transactions.sql`、`scripts/week12_*`、`result/第12周-*` |
 | 结果目录（证据与截图） | `result/`（索引：`result/README.md`；界面截图 `result/fig/web-01 … web-15`） |
 | 阶段报告 | `docs/03-阶段报告.md` |
 | AI 使用记录 | `docs/04-AI使用记录/`（按成员分子目录） |

@@ -491,6 +491,12 @@ def update_order_status(
     return cur.rowcount
 
 
+def complete_order(cur, order_id: str) -> int:
+    """执行 v2.4 订单完成过程，在调用方事务中返回命中行数。"""
+    cur.execute("EXEC dbo.usp_complete_order @order_id = ?", order_id)
+    return int(fetch_scalar(cur, 0))
+
+
 def cancel_order(cur, order_id: str) -> int:
     """未付款取消：仅 ``PENDING → CANCELLED``。"""
     cur.execute(

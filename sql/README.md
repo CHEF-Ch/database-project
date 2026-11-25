@@ -140,3 +140,21 @@ python scripts/week11_app_test.py --write
 
 > **触发器报错的事务行为**：触发器内 `THROW` 会把当前事务标记为不可提交（`XACT_STATE=-1`），由调用方整体回滚。
 > 应用 `db_cursor(commit=True)` 会走回滚分支；测试脚本对每个预期失败用例单独开事务并在捕获后 `ROLLBACK`。
+
+## 第十二周递归查询与业务事务
+
+从仓库根目录用 sqlcmd 执行 `sql/migration_v2_4_transactions.sql`，目标为 v2.3 或 v2.4 副本。迁移在同一事务内安装两个过程、授权并写入版本标记，表结构指纹仍为 271。部署失败时 sqlcmd 中止并释放连接，重跑前检查版本和对象。恢复至 v2.3 使用升级前备份。
+
+| 对象 | 输入与结果 | 写入职责 |
+| --- | --- | --- |
+| `recursive_query.sql` | `@requested` 填分类编号，返回节点、相对层级和路径；不存在编号返回空节点 | 只使用脚本自带分类样例，路径中的编号用于阻断环，递归上限为 100 |
+| `usp_complete_order` | 订单号、可选完成时间，返回 `affected` 0 或 1 | 支付已按耗用快照扣料，完成过程写入状态和完成时间。v2.3 触发器验证时间、明细、金额和 SALE 扣料证据 |
+| `usp_receive_restock` | 补货单号、验收员工、可选验收时间，返回 `affected` 0 或 1 | 先锁单据并校验待入库明细，再按原料号更新库存、写 IN 流水和审计，最后更新单据状态。相同单据重复验收返回 0 |
+
+独立 SQL 调用由过程提交或回滚。过程临时关闭隐式事务模式以避免重复开启事务，返回后恢复调用方设置。Web 应用传入已有事务时，过程参与调用方事务，异常上抛，由应用整体回滚。两条业务过程分别授权 `role_app` 和 `role_stock_keeper`。旧数据库版本仍使用对应版本原有的写入路径。
+
+`scripts/week12_transaction_test.sql` 在 `MilkTeaShop_week11_week12*` 独立库准备并清理固定夹具。P、Q 初始库存为 10、8，正常补 P 五件。回滚用例先将 Q 置于库存上限，使补货第二笔溢出，核对第一笔库存、流水与审计一起恢复。订单回滚用例在完成状态已写入后抛错，验证调用方回滚。
+
+应用回归使用独立测试库。配置 `DB_NAME` 后运行 `python scripts/order_pages_test.py --sql-auth`。页面回归会写入并消耗种子订单，重复运行前应重新建库。
+
+应用专项另设 `DB_AUTH=sql` 与 `DB_PWD_LOGIN_STOCK`、`DB_PWD_LOGIN_APP`、`DB_PWD_LOGIN_MANAGER`，再运行 `python scripts/week12_app_test.py`。支付反例在独立库临时清除最后一种原料的预占，验证较早原料的扣料、流水和审计回滚，随后恢复预占并取消测试单。

@@ -159,7 +159,10 @@ def receive_restock(restock_id: str, employee_id: str) -> dict:
     with db_cursor("stock", commit=True) as cur:
         if _inv.get_restock(cur, restock_id) is None:
             raise AppError(ErrCode.NOT_FOUND)
-        result = _inv.receive_restock(cur, restock_id, employee_id=eid)
+        if schema_version(cur) == "2.4":
+            result = _inv.receive_restock_transaction(cur, restock_id, eid)
+        else:
+            result = _inv.receive_restock(cur, restock_id, employee_id=eid)
         if result is None:
             raise AppError(ErrCode.BUSINESS_RULE, "补货单不是待验收状态，无法验收。")
         return result

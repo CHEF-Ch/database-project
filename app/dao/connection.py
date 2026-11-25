@@ -144,7 +144,7 @@ def schema_version(cur) -> str:
     """)
     row = cur.fetchone()
     version = row[0] if row else "1.0"
-    if version not in {"1.0", "2.0", "2.1", "2.2", "2.3"}:
+    if version not in {"1.0", "2.0", "2.1", "2.2", "2.3", "2.4"}:
         raise AppError(ErrCode.DB_UNAVAILABLE, detail=f"Unsupported schema version: {version}")
     return version
 
@@ -171,7 +171,10 @@ def probe_database() -> dict:
             "AND (SELECT COUNT(*) FROM sys.triggers WHERE is_disabled = 0 AND object_id IN "
             "(OBJECT_ID('dbo.trg_item_material_audit', 'TR'), "
             "OBJECT_ID('dbo.trg_shop_order_complete', 'TR'))) = 2 "
-            "THEN 1 ELSE 0 END AS audit_objects"
+            "THEN 1 ELSE 0 END AS audit_objects, "
+            "CASE WHEN OBJECT_ID('dbo.usp_complete_order', 'P') IS NOT NULL "
+            "AND OBJECT_ID('dbo.usp_receive_restock', 'P') IS NOT NULL "
+            "THEN 1 ELSE 0 END AS transaction_objects"
         )
         meta = cur.fetchone()
 
@@ -196,9 +199,10 @@ def probe_database() -> dict:
             and meta.v2_objects == 1 and meta.usage_table is not None)
         or (schema_version == "2.2" and parts == V22_SCHEMA_PARTS
             and meta.v2_objects == 1 and meta.usage_table is not None and meta.user_store == 1)
-        or (schema_version == "2.3" and parts == V23_SCHEMA_PARTS
+        or (schema_version in {"2.3", "2.4"} and parts == V23_SCHEMA_PARTS
             and meta.v2_objects == 1 and meta.usage_table is not None
-            and meta.user_store == 1 and meta.audit_objects == 1)
+            and meta.user_store == 1 and meta.audit_objects == 1
+            and (schema_version == "2.3" or meta.transaction_objects == 1))
     )
     return {
         "ok": True,
