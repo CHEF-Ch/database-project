@@ -276,13 +276,13 @@ def _normalise_context(
 # ---------------------------------------------------------------------------
 # 事务内的小工具
 # ---------------------------------------------------------------------------
-def _load_lines(cur, lines: list[dict]) -> tuple[Decimal, dict[str, Decimal]]:
+def _load_lines(cur, lines: list[dict], *, for_update: bool = True) -> tuple[Decimal, dict[str, Decimal]]:
     """校验商品/加料、计算金额与原料耗用（全部取当前主数据价/用量）。"""
     subtotal = Decimal("0.00")
     usages: defaultdict[str, Decimal] = defaultdict(lambda: Decimal("0.00"))
 
     for line in lines:
-        product = _product.get_product(cur, line["product_id"], for_update=True)
+        product = _product.get_product(cur, line["product_id"], for_update=for_update)
         if product is None:
             raise AppError(ErrCode.NOT_FOUND, detail=f"商品不存在：{line['product_id']}")
         if product["sale_status"] != "ON_SALE":
@@ -310,7 +310,7 @@ def _load_lines(cur, lines: list[dict]) -> tuple[Decimal, dict[str, Decimal]]:
 
         for addon in line["addons"]:
             option = _product.get_addon_option(
-                cur, product["product_id"], addon["material_id"], for_update=True
+                cur, product["product_id"], addon["material_id"], for_update=for_update
             )
             if option is None:
                 raise AppError(
@@ -346,6 +346,7 @@ def _apply_coupon(
     member_coupon_id: int | None,
     subtotal: Decimal,
     today: date | None = None,
+    for_update: bool = True,
 ) -> tuple[Decimal, dict | None]:
     """校验券并返回（优惠额，券行）；不在这里锁券（订单头还没插入）。"""
     if not member_coupon_id:
@@ -357,7 +358,7 @@ def _apply_coupon(
         coupon_id = int(member_coupon_id)
     except (TypeError, ValueError) as exc:
         raise AppError(ErrCode.PARAM_INVALID, "券编号不合法。") from exc
-    coupon = _member.get_member_coupon(cur, coupon_id, for_update=True)
+    coupon = _member.get_member_coupon(cur, coupon_id, for_update=for_update)
     if coupon is None or coupon["member_id"] != member_id:
         raise AppError(ErrCode.BUSINESS_RULE, "券不存在或不属于当前会员。")
     if coupon["coupon_status"] != "UNUSED" or coupon["used_order_id"] is not None:
@@ -379,7 +380,7 @@ def _apply_coupon(
             detail=f"未达到券门槛：{subtotal} < {threshold}",
         )
     discount = _money(coupon["discount_amount"])
-    if schema_version(cur) in {"2.0", "2.1", "2.2", "2.3", "2.4"}:
+    if schema_version(cur) in {"2.0", "2.1", "2.2", "2.3", "2.4", "2.5"}:
         discount = _member.calculate_discount(cur, subtotal, threshold, discount)
         if discount is None:
             raise AppError(ErrCode.BUSINESS_RULE, "优惠券规则无效，请联系店长。")
@@ -415,7 +416,7 @@ def _is_order_id_collision(exc: AppError) -> bool:
 
 
 def _pending_order_usage(cur, order_id: str) -> dict[str, Decimal]:
-    if schema_version(cur) not in {"2.1", "2.2", "2.3", "2.4"}:
+    if schema_version(cur) not in {"2.1", "2.2", "2.3", "2.4", "2.5"}:
         detail = _order.get_order_detail(cur, order_id)
         return _usages_for_items(cur, detail["items"])
 
@@ -436,6 +437,34 @@ def _points(total: Decimal) -> int:
 # ---------------------------------------------------------------------------
 # 下单
 # ---------------------------------------------------------------------------
+def quote_order(
+    *, items: Iterable[dict], member_id: str | None, employee_id: str | None,
+    channel: str, order_mode: str | None, pay_method: str | None,
+    member_coupon_id: int | None, platform: dict | None,
+) -> dict:
+    role = _actor(None)
+    context = _normalise_context(
+        role=role, channel=channel, order_mode=order_mode, pay_method=pay_method,
+        member_id=member_id, employee_id=employee_id, platform=platform,
+    )
+    member = context["member_id"]
+    with db_cursor("app") as cur:
+        subtotal, _ = _load_lines(cur, _normalise_items(items), for_update=False)
+        discount, _ = _apply_coupon(
+            cur, member_id=member, member_coupon_id=member_coupon_id,
+            subtotal=subtotal, for_update=False,
+        )
+        coupons = _member.list_usable_coupons(cur, member, subtotal=subtotal) if member else []
+        return {
+            "subtotal": subtotal, "discount": discount, "total": _money(subtotal - discount),
+            "coupons": [
+                {"id": row["member_coupon_id"], "name": row["coupon_name"],
+                 "discount": row["discount_amount"], "total": _money(subtotal - row["discount_amount"])}
+                for row in coupons
+            ],
+        }
+
+
 def create_order(
     *,
     items: Iterable[dict],
@@ -559,7 +588,7 @@ def _create_order_tx(
                 addon_price=addon["addon_price"],
             )
 
-    if schema_version(cur) in {"2.1", "2.2", "2.3", "2.4"}:
+    if schema_version(cur) in {"2.1", "2.2", "2.3", "2.4", "2.5"}:
         _order.save_material_usage(cur, order_id, usages)
 
     if channel == "PLATFORM":
@@ -872,7 +901,7 @@ def update_order_status(
                 ErrCode.BUSINESS_RULE,
                 detail=f"非法状态流转：{current} → {target}",
             )
-        if target == "COMPLETED" and schema_version(cur) == "2.4":
+        if target == "COMPLETED" and schema_version(cur) in {"2.4", "2.5"}:
             updated = _order.complete_order(cur, order_id)
         else:
             updated = _order.update_order_status(

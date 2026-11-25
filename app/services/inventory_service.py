@@ -159,7 +159,7 @@ def receive_restock(restock_id: str, employee_id: str) -> dict:
     with db_cursor("stock", commit=True) as cur:
         if _inv.get_restock(cur, restock_id) is None:
             raise AppError(ErrCode.NOT_FOUND)
-        if schema_version(cur) == "2.4":
+        if schema_version(cur) in {"2.4", "2.5"}:
             result = _inv.receive_restock_transaction(cur, restock_id, eid)
         else:
             result = _inv.receive_restock(cur, restock_id, employee_id=eid)

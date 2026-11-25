@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}经营报表{% endblock %}
+{% block content %}
+<h1>经营报表</h1>
+<form method="get" class="form inline">
+  <label>开始日期 <input type="date" name="date_from" value="{{ start }}" required></label>
+  <label>结束日期 <input type="date" name="date_to" value="{{ end }}" required></label>
+  <button class="btn" type="submit">查询</button>
+</form>
+<h2>销售汇总</h2>
+<p>共 {{ data.totals.order_count }} 单，售出 {{ data.totals.sold_qty }} 杯，券后销售额 ¥{{ data.totals.sales_amount }}，退款 ¥{{ data.totals.refund_amount }}。</p>
+<p class="note">按订单创建日期统计。销售额含加料并扣除优惠，退款单列。商品金额只含饮品，不代表门店到账。</p>
+<h2>商品销量排名</h2>
+<table class="table"><thead><tr><th>排名</th><th>商品</th><th>杯型</th><th>销量</th><th>商品金额</th></tr></thead>
+<tbody>{% for row in data.rankings %}<tr><td>{{ row.qty_rank }}</td><td>{{ row.product_name }}</td><td>{{ row.size }}</td><td>{{ row.sold_qty }}</td><td>{{ row.sales_amount }}</td></tr>
+{% else %}<tr><td colspan="5">区间内暂无销量。</td></tr>{% endfor %}</tbody></table>
+<h2>每日走势</h2>
+<table class="table"><thead><tr><th>日期</th><th>销量</th><th>累计销量</th><th>累计商品金额</th><th>近 3 日平均销量</th><th>近 3 日平均商品金额</th></tr></thead>
+<tbody>{% for row in data.days %}<tr><td>{{ row.sale_date }}</td><td>{{ row.sold_qty }}</td><td>{{ row.cumulative_qty }}</td><td>{{ row.cumulative_amount }}</td><td>{{ row.moving_avg_qty }}</td><td>{{ row.moving_avg_amount }}</td></tr>{% endfor %}</tbody></table>
+<h2>原料临期</h2>
+<p class="note">按最近一次入库和保质期估算，独立于销售日期筛选。</p>
+<table class="table"><thead><tr><th>原料</th><th>最近入库</th><th>预计到期</th><th>剩余天数</th></tr></thead>
+<tbody>{% for row in data.expiry %}<tr><td>{{ row.material_name }}</td><td>{{ row.restock_in_at }}</td><td>{{ row.estimated_expire_at }}</td><td>{{ row.remaining_days }}</td></tr>
+{% else %}<tr><td colspan="4">暂无临期记录。</td></tr>{% endfor %}</tbody></table>
+{% endblock %}

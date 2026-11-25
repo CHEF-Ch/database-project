@@ -6,6 +6,8 @@
 """
 from __future__ import annotations
 
+from datetime import date
+
 from flask import Blueprint, jsonify, render_template, session
 from app.pages._paging import date_arg, int_arg, page_url
 from app.services import member_service, report_service
@@ -62,3 +64,12 @@ def member_account():
 def sales_report():
     report = report_service.sales_statistics(date_arg("date_from"), date_arg("date_to"))
     return jsonify(report)
+
+
+@bp.get("/reports")
+@role_required("report.sales.read")
+def reports():
+    today = date.today()
+    start = date_arg("date_from") or today.replace(day=1)
+    end = date_arg("date_to") or today
+    return render_template("reports.html", start=start, end=end, data=report_service.dashboard(start, end))

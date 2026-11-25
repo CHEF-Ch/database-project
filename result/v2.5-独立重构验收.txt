@@ -1,0 +1,24 @@
+v2.5 独立重构验收记录
+
+验收库 MilkTeaShop_week11_refactor
+SQL 登录健康检查 v2.5 / 指纹 281 / match=true
+
+scripts/v2_5_integrity_test.sql
+PASS R04 合法与非法选项混合插入整体回滚
+PASS R04 原料类别反向校验
+PASS R04 新订单明细杯型校验
+PASS R04 新加料行必须属于对应商品
+PASS R04 商品改杯型后历史快照保持原值
+PASS R08 重跑迁移后已知基线关联没有重复
+
+scripts/order_pages_test.py --sql-auth
+总计 147 项，PASS 147，FAIL 0
+复核修正共用表单解析遗漏的现金支付及点单方式字段后重跑。
+
+scripts/v2_5_app_test.py
+PASS S02 登录限流、滑动过期、过期后禁止读写、无演示账号列表
+PASS F04 真实经理登录报表及日期边界，顾客拒绝访问
+PASS F06 报价门槛、券后金额、会员隔离及订单、库存、券状态零写入
+PASS R08 锁券、取消归还、复用、核销与退款归还，重复支付和退款无重复事件
+
+限流按应用进程计数，未验收跨进程共享限流。本轮未测试第十三周锁等待及死锁实验。

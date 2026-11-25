@@ -122,6 +122,7 @@ def list_usable_coupons(
     sql = _COUPON_SELECT.format(lock="") + """
         WHERE mc.member_id = ?
           AND mc.coupon_status = 'UNUSED'
+          AND mc.used_order_id IS NULL
           AND r.valid_from <= ?
           AND r.valid_to >= ?
           AND r.threshold_amount <= ?

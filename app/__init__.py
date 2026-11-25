@@ -10,6 +10,7 @@ from app.config import Config, load_dotenv
 from app.csrf import init_csrf
 from app.errors import register_error_handlers
 from app.services.auth import ConfigUserStore, DbUserStore
+from app.services.login_guard import init_login_guard
 
 
 def create_app() -> Flask:
@@ -29,6 +30,7 @@ def create_app() -> Flask:
     # CSRF 必须注册在 register_error_handlers 之后：后者先装 before_request 分配 rid，
     # 拒绝日志才能带上 rid 关联。
     init_csrf(app)
+    init_login_guard(app)
 
     # 用户存储：v1.0 = 配置内 demo 账号；v2.0 = app_user 表（接口不变）
     app.user_store = DbUserStore() if Config.USER_STORE == "db" else ConfigUserStore()

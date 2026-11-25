@@ -31,6 +31,7 @@ V21_SCHEMA_PARTS = {**V1_SCHEMA_PARTS, "columns": 114, "pk": 18, "fk": 27, "chec
 V22_SCHEMA_PARTS = {**V21_SCHEMA_PARTS, "columns": 121, "pk": 19, "fk": 29, "check": 63, "default": 17}
 # v2.3：+inv_stock_audit（9 物理列 + 1 计算列 +1 PK +3 CHECK +1 DEFAULT），外码不变
 V23_SCHEMA_PARTS = {**V22_SCHEMA_PARTS, "columns": 131, "pk": 20, "check": 66, "default": 18}
+V25_SCHEMA_PARTS = {**V23_SCHEMA_PARTS, "columns": 138, "pk": 21, "check": 67, "default": 19}
 
 _FINGERPRINT_SQL = """
 SELECT
@@ -144,7 +145,7 @@ def schema_version(cur) -> str:
     """)
     row = cur.fetchone()
     version = row[0] if row else "1.0"
-    if version not in {"1.0", "2.0", "2.1", "2.2", "2.3", "2.4"}:
+    if version not in {"1.0", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"}:
         raise AppError(ErrCode.DB_UNAVAILABLE, detail=f"Unsupported schema version: {version}")
     return version
 
@@ -174,7 +175,15 @@ def probe_database() -> dict:
             "THEN 1 ELSE 0 END AS audit_objects, "
             "CASE WHEN OBJECT_ID('dbo.usp_complete_order', 'P') IS NOT NULL "
             "AND OBJECT_ID('dbo.usp_receive_restock', 'P') IS NOT NULL "
-            "THEN 1 ELSE 0 END AS transaction_objects"
+            "THEN 1 ELSE 0 END AS transaction_objects, "
+            "CASE WHEN OBJECT_ID('dbo.mkt_coupon_order_event', 'U') IS NOT NULL "
+            "AND (SELECT COUNT(*) FROM sys.triggers WHERE is_disabled = 0 AND object_id IN "
+            "(OBJECT_ID('dbo.trg_addon_option_material', 'TR'), "
+            "OBJECT_ID('dbo.trg_material_addon_category', 'TR'), "
+            "OBJECT_ID('dbo.trg_order_item_catalog_snapshot', 'TR'), "
+            "OBJECT_ID('dbo.trg_order_addon_catalog_snapshot', 'TR'), "
+            "OBJECT_ID('dbo.trg_member_coupon_order_event', 'TR'))) = 5 "
+            "THEN 1 ELSE 0 END AS integrity_objects"
         )
         meta = cur.fetchone()
 
@@ -199,10 +208,12 @@ def probe_database() -> dict:
             and meta.v2_objects == 1 and meta.usage_table is not None)
         or (schema_version == "2.2" and parts == V22_SCHEMA_PARTS
             and meta.v2_objects == 1 and meta.usage_table is not None and meta.user_store == 1)
-        or (schema_version in {"2.3", "2.4"} and parts == V23_SCHEMA_PARTS
+        or (schema_version in {"2.3", "2.4", "2.5"}
+            and parts == (V25_SCHEMA_PARTS if schema_version == "2.5" else V23_SCHEMA_PARTS)
             and meta.v2_objects == 1 and meta.usage_table is not None
             and meta.user_store == 1 and meta.audit_objects == 1
-            and (schema_version == "2.3" or meta.transaction_objects == 1))
+            and (schema_version == "2.3" or meta.transaction_objects == 1)
+            and (schema_version != "2.5" or meta.integrity_objects == 1))
     )
     return {
         "ok": True,

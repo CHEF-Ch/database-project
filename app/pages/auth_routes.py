@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from urllib.parse import urlsplit
+from time import time
 
 from flask import Blueprint, current_app, flash, g, redirect, render_template, request, session, url_for
 
@@ -39,19 +40,10 @@ def _render_login(*, error=None, fields=frozenset(), field_errors=None, form=Non
 
     ``fields`` 指定要高亮的输入框（``aria-invalid``），``field_errors`` 给字段级提示。
     """
-    accounts = [
-        {
-            "username": item["username"],
-            "role": item["role"],
-            "label": ROLE_LABELS.get(item["role"], item["role"]),
-        }
-        for item in current_app.user_store.list_accounts()
-    ]
     next_url = safe_next(request.args.get("next") or request.form.get("next"))
     return (
         render_template(
             "login.html",
-            accounts=accounts,
             next_url=next_url,
             error=error,
             fields=fields,
@@ -92,11 +84,18 @@ def login():
             form=request.form,
         )
 
+    limiter = current_app.extensions["login_limiter"]
+    address = request.remote_addr or "unknown"
+    if not limiter.allow(address, username):
+        return _render_login(
+            error=AppError(ErrCode.AUTH_FAILED, "尝试次数过多，请稍后再试。", status=429),
+            form=request.form,
+        )
     user = current_app.user_store.verify(username, password)
     if user is None:
         # 安全取舍：**不区分**"用户不存在"与"密码错误"（防账号枚举），
         # 两种失败回同一个文案、同一组高亮；明细只进日志。见 docs/09 AUTH-03。
-        err = AppError(ErrCode.AUTH_FAILED, detail=f"login failed: {username}")
+        err = AppError(ErrCode.AUTH_FAILED)
         current_app.logger.warning(
             "rid=%s auth-failed path=%s detail=%s",
             getattr(g, "request_id", "-"), request.path, err.detail,
@@ -105,7 +104,9 @@ def login():
             error=err, fields=frozenset({"username", "password"}), form=request.form
         )
 
+    limiter.success(address, username)
     session.clear()
+    session["last_activity"] = int(time())
     session["username"] = user["username"]
     session["role"] = user["role"]
     session["display"] = user["display"]

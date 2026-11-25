@@ -26,6 +26,9 @@
         <a href="{{ url_for('inventory.list_stock') }}"
            {% if request.endpoint and request.endpoint.startswith('inventory.') %}aria-current="page"{% endif %}>库存</a>
       {% endif %}
+      {% if 'report.sales.read' in (perms or ()) %}
+        <a href="{{ url_for('main.reports') }}" {% if request.endpoint == 'main.reports' %}aria-current="page"{% endif %}>报表</a>
+      {% endif %}
       {% if 'order.create' in (perms or ()) %}
         <a href="{{ url_for('order.new_order') }}"
            {% if request.endpoint == 'order.new_order' %}aria-current="page"{% endif %}>点单</a>

@@ -36,16 +36,4 @@
   <button class="btn primary" type="submit">登录</button>
 </form>
 
-{% if accounts %}
-<h2>演示账号</h2>
-<table class="table">
-  <thead><tr><th scope="col">用户名</th><th scope="col">角色</th></tr></thead>
-  <tbody>
-    {% for a in accounts %}
-    <tr><td><code>{{ a.username }}</code></td><td>{{ a.label }}</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
-<p class="note">密码见 README「演示账号」表。</p>
-{% endif %}
 {% endblock %}

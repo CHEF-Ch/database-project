@@ -117,7 +117,7 @@ def classify_db_error(exc: BaseException) -> AppError:
     if "51201" in numbers:
         return AppError(ErrCode.DB_UNAVAILABLE, detail=text)
     if numbers & {"51111", "51112", "51113", "51114", "51115", "51116", "51117",
-                  "51202", "51203", "51204"}:
+                  "51202", "51203", "51204", "51302", "51303", "51304", "51305"}:
         return AppError(ErrCode.BUSINESS_RULE, detail=text)
 
     if any(state.startswith("23") for state in states) or (numbers & _DB_CONSTRAINT_NUMS):

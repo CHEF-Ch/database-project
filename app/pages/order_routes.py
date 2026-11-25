@@ -18,7 +18,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from flask import Blueprint, current_app, flash, g, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, flash, g, jsonify, redirect, render_template, request, session, url_for
 
 from app.errors import AppError, ErrCode
 from app.pages._paging import (
@@ -446,27 +446,34 @@ def new_order():
     )
 
 
+def _order_input(products: list[dict]) -> dict:
+    items = _collect_items(products)
+    if not items:
+        raise AppError(ErrCode.PARAM_INVALID, "请至少选择一杯饮品（杯数填 1—99）。")
+    channel = (request.form.get("channel") or "COUNTER").strip().upper()
+    return {
+        "items": items, "member_id": _member_for_submit(current_role()),
+        "employee_id": session.get("employee_id"), "channel": channel,
+        "order_mode": (request.form.get("order_mode") or "").strip() or None,
+        "pay_method": (request.form.get("pay_method") or "").strip() or None,
+        "member_coupon_id": _coupon_id_from_form(),
+        "platform": _platform_from_form() if channel == "PLATFORM" else None,
+    }
+
+
+@bp.post("/quote")
+@role_required("order.create")
+def quote():
+    return jsonify(order_service.quote_order(**_order_input(_orderable_products())))
+
+
 @bp.post("/")
 @role_required("order.create")
 def create_order():
     role = current_role()
     products = _orderable_products()
     try:
-        items = _collect_items(products)
-        if not items:
-            raise AppError(ErrCode.PARAM_INVALID, "请至少选择一杯饮品（杯数填 1—99）。")
-
-        channel = (request.form.get("channel") or "COUNTER").strip().upper()
-        created = order_service.create_order(
-            items=items,
-            member_id=_member_for_submit(role),
-            employee_id=session.get("employee_id"),
-            channel=channel,
-            order_mode=(request.form.get("order_mode") or "").strip() or None,
-            pay_method=(request.form.get("pay_method") or "").strip() or None,
-            member_coupon_id=_coupon_id_from_form(),
-            platform=_platform_from_form() if channel == "PLATFORM" else None,
-        )
+        created = order_service.create_order(**_order_input(products))
     except AppError as err:
         # 表单错误在页面层就地回填重渲染（WTForms/Rails 的做法）：用户不用重填；
         # 错误明细仍写日志（全局处理器不再经手，故这里自己记一份带 rid 的）

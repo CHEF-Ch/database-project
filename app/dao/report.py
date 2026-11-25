@@ -51,6 +51,24 @@ def product_sales_summary(
     return rows_to_dicts(cur)
 
 
+def sales_windows(cur, date_from: date, date_to: date) -> dict[str, list]:
+    cur.execute(
+        "SELECT * FROM dbo.fn_product_sales_rank(?, ?) ORDER BY qty_rank, product_id, size",
+        date_from, date_to,
+    )
+    rankings = rows_to_dicts(cur)
+    cur.execute(
+        """
+        SELECT c.*, m.moving_avg_qty, m.moving_avg_amount
+        FROM dbo.fn_daily_sales_cumulative(?, ?) AS c
+        JOIN dbo.fn_daily_sales_moving_avg(?, ?) AS m ON m.sale_date = c.sale_date
+        ORDER BY c.sale_date
+        """,
+        date_from, date_to, date_from, date_to,
+    )
+    return {"rankings": rankings, "days": rows_to_dicts(cur)}
+
+
 def daily_order_summary(
     cur,
     *,

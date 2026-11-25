@@ -158,3 +158,27 @@ python scripts/week11_app_test.py --write
 应用回归使用独立测试库。配置 `DB_NAME` 后运行 `python scripts/order_pages_test.py --sql-auth`。页面回归会写入并消耗种子订单，重复运行前应重新建库。
 
 应用专项另设 `DB_AUTH=sql` 与 `DB_PWD_LOGIN_STOCK`、`DB_PWD_LOGIN_APP`、`DB_PWD_LOGIN_MANAGER`，再运行 `python scripts/week12_app_test.py`。支付反例在独立库临时清除最后一种原料的预占，验证较早原料的扣料、流水和审计回滚，随后恢复预占并取消测试单。
+
+## v2.5 跨表规则和用券历史
+
+在 v2.4 副本执行 `sql/migration_v2_5_integrity.sql`。迁移可重复运行，安装事务中检查已有加料配置、
+部署五个触发器、建立用券事件表并授予经理只读权限。若已有品类与加料引用冲突，迁移会整体退出，需核对主数据后重跑。
+迁移前备份可用于恢复 v2.4。
+
+- 加料选项必须引用加料类型原料，存在选项时不得反向改为普通原料。新增订单行或更改商品、杯型时校验当前规格，新增加料引用须属于该商品。主数据后续变更保留历史行的杯型和加料快照。
+- `mkt_coupon_order_event` 随原业务事务记录锁定、核销和归还。迁移只为仍能确认的订单关联记 `BASELINE`，其时间是迁移采集时间。丢失的旧关联保持未知。历史可按旧订单号查询，券再次用于其他订单时仍保留。
+- 经理报表读取统计过程、三个窗口函数和临期视图。报价和下单共用商品、加料及券金额校验，报价连接按只读结束，正式提交重新计算并校验库存和券。
+
+在独立库按序部署 v2.3、v2.4、v2.5。以下命令以仓库根目录为工作目录。
+
+```powershell
+.\scripts\create_week11_acceptance_db.ps1 -Database MilkTeaShop_week11_refactor
+$env:DB_NAME = 'MilkTeaShop_week11_refactor'
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -d $env:DB_NAME -i sql/migration_v2_4_transactions.sql
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -d $env:DB_NAME -i sql/migration_v2_5_integrity.sql
+sqlcmd -S '.\SQLEXPRESS' -E -C -b -f 65001 -d $env:DB_NAME -i scripts/v2_5_integrity_test.sql
+python scripts/order_pages_test.py --sql-auth
+python scripts/v2_5_app_test.py
+```
+
+应用专项使用种子账号和有效券，会提交测试订单及用券事件。进行全量复现时使用新建副本。

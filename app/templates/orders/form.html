@@ -240,9 +240,41 @@
       <span>券前预估 <strong>¥<span id="preview" aria-live="polite">0.00</span></strong></span>
       <span id="preview-discount" class="note"></span>
     </div>
+    <button class="btn" type="button" id="order-quote" data-url="{{ url_for('order.quote') }}">核算报价</button>
     <button class="btn primary" type="submit" id="order-submit">提交订单</button>
   </div>
 </form>
+<p id="order-quote-result" class="note" role="status"></p>
+
+<script>
+(() => {
+  const form = document.getElementById("order-form");
+  const button = document.getElementById("order-quote");
+  const output = document.getElementById("order-quote-result");
+  let revision = 0;
+  form.addEventListener("input", () => { revision++; output.textContent = ""; });
+  button.addEventListener("click", async () => {
+    const current = ++revision;
+    output.textContent = "正在核算…";
+    try {
+      const response = await fetch(button.dataset.url, {
+        method: "POST", body: new FormData(form), headers: { Accept: "application/json" }
+      });
+      const data = await response.json();
+      if (current !== revision) return;
+      if (!response.ok) {
+        output.textContent = data.message || "暂时无法核算报价。";
+        return;
+      }
+      const coupons = data.coupons.map(c => c.name + "（券号 " + c.id + "，用券后 ¥" + c.total + "）");
+      output.textContent = "券前 ¥" + data.subtotal + "，优惠 ¥" + data.discount + "，应付 ¥" + data.total
+        + (coupons.length ? "。可用券：" + coupons.join("、") : "。当前无可用券。");
+    } catch {
+      if (current === revision) output.textContent = "暂时无法核算报价。";
+    }
+  });
+})();
+</script>
 
 <p>
   {% if 'order.read' in perms %}<a class="btn" href="{{ url_for('order.list_orders') }}">返回订单列表</a>{% endif %}
