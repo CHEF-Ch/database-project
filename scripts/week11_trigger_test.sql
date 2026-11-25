@@ -275,7 +275,7 @@ BEGIN TRANSACTION;
     UPDATE dbo.shop_order SET order_status = 'COMPLETED', completed_at = '2099-01-01T01:00:00'
     WHERE order_id = '209901010002';
     BEGIN TRY
-        UPDATE dbo.shop_order SET order_status = 'COMPLETED', completed_at = '2099-01-01T02:00:00'
+        UPDATE dbo.shop_order SET completed_at = '2099-01-01T02:00:00'
         WHERE order_id = '209901010002';
         THROW 51931, N'重复完成未被拒绝。', 1;
     END TRY
@@ -358,6 +358,48 @@ BEGIN TRANSACTION;
     END CATCH;
 ROLLBACK;
 PRINT N'PASS 14 无 SALE 扣料 → 51117';
+
+BEGIN TRANSACTION;
+    BEGIN TRY
+        EXEC #w11_order '209901010006', 'COMPLETED', 22.00, 22.00, 'CASH',
+             '2099-01-01T00:10:00', '2099-01-01T01:00:00';
+        THROW 51941, N'直接插入已完成单未被拒绝。', 1;
+    END TRY
+    BEGIN CATCH
+        IF ERROR_NUMBER() <> 51112 THROW;
+    END CATCH;
+ROLLBACK;
+PRINT N'PASS 14a 直接插入已完成单 → 51112';
+
+BEGIN TRANSACTION;
+    EXEC #w11_order '209901010006', 'MAKING', 22.00, 22.00, 'CASH', '2099-01-01T00:10:00';
+    INSERT dbo.inv_stock_log (material_id, log_type, qty, order_id, employee_id, created_at)
+    VALUES ('M0000001', 'SALE', 1, '209901010006', 'E0000001', '2099-01-01T00:10:00');
+    BEGIN TRY
+        UPDATE dbo.shop_order SET order_status = 'COMPLETED', completed_at = '2099-01-01T01:00:00'
+        WHERE order_id = '209901010006';
+        THROW 51942, N'重复 SALE 流水未被拒绝。', 1;
+    END TRY
+    BEGIN CATCH
+        IF ERROR_NUMBER() <> 51117 THROW;
+    END CATCH;
+ROLLBACK;
+PRINT N'PASS 14b 重复 SALE 流水 → 51117';
+
+BEGIN TRANSACTION;
+    EXEC #w11_order '209901010006', 'MAKING', 22.00, 22.00, 'CASH', '2099-01-01T00:10:00';
+    INSERT dbo.inv_stock_log (material_id, log_type, qty, order_id, employee_id, created_at)
+    VALUES ('M0000002', 'SALE', 1, '209901010006', 'E0000001', '2099-01-01T00:10:00');
+    BEGIN TRY
+        UPDATE dbo.shop_order SET order_status = 'COMPLETED', completed_at = '2099-01-01T01:00:00'
+        WHERE order_id = '209901010006';
+        THROW 51943, N'快照外 SALE 流水未被拒绝。', 1;
+    END TRY
+    BEGIN CATCH
+        IF ERROR_NUMBER() <> 51117 THROW;
+    END CATCH;
+ROLLBACK;
+PRINT N'PASS 14c 快照外 SALE 流水 → 51117';
 
 PRINT N'== 15. 完成：完成时间缺失被拒（51113） ==';
 BEGIN TRANSACTION;
@@ -448,4 +490,4 @@ PRINT N'PASS 18 历史订单按明细快照完成，不因商品改杯型被拒'
 
 /* --------------------------------------------------------------------------- */
 PRINT N'';
-PRINT N'ALL TRIGGER TESTS PASSED（18 组主用例，另有 7b/9b/10b 受限账户与 no-op 子用例；审计 8 组 / 完成 10 组）';
+PRINT N'ALL TRIGGER TESTS PASSED（18 组主用例，另有 7b/9b/10b/14a/14b/14c 子用例；审计 8 组 / 完成 10 组）';

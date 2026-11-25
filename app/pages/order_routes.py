@@ -507,6 +507,7 @@ def pay(order_id):
         pay_method=request.form.get("pay_method"),
         pay_txn_no=request.form.get("pay_txn_no"),
         member_id=session.get("member_id"),
+        employee_id=session.get("employee_id"),
     )
     flash("支付已确认，订单状态已更新。", "success")
     return redirect(url_for("order.detail", order_id=order_id))

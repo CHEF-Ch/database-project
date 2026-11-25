@@ -113,7 +113,7 @@ GO
 /* ---------------------------------------------------------------------------
    ③ 订单完成规则触发器
    ---------------------------------------------------------------------------
-   事件：AFTER UPDATE on dbo.shop_order，仅当 order_status 出现在 SET 列表。
+   事件：AFTER INSERT, UPDATE on dbo.shop_order。直接插入已完成订单或改写完成时间会被拒绝。
    规则（错误号）：
      C1 51112  只允许 MAKING → COMPLETED
      C2 51111  已是 COMPLETED 又写 COMPLETED：重复完成/改已完成单
@@ -126,12 +126,20 @@ GO
    --------------------------------------------------------------------------- */
 CREATE OR ALTER TRIGGER dbo.trg_shop_order_complete
 ON dbo.shop_order
-AFTER UPDATE
+AFTER INSERT, UPDATE
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    IF NOT UPDATE(order_status)
+    IF EXISTS (
+        SELECT 1
+        FROM inserted AS i
+        LEFT JOIN deleted AS d ON d.order_id = i.order_id
+        WHERE i.order_status = 'COMPLETED' AND d.order_id IS NULL
+    )
+        THROW 51112, N'订单必须从制作中转为已完成，不能直接插入已完成订单。', 1;
+
+    IF NOT UPDATE(order_status) AND NOT UPDATE(completed_at)
         RETURN;
 
     -- C2：重复完成（对已完成单再次完成/重写完成时间）；纯 no-op（SET order_status=order_status）放行，
@@ -254,12 +262,22 @@ BEGIN
         WHERE i.order_status = 'COMPLETED'
           AND d.order_status = 'MAKING'
           AND NOT EXISTS (
-              SELECT 1
-              FROM dbo.inv_stock_log AS l
-              WHERE l.order_id = u.order_id
-                AND l.material_id = u.material_id
+              SELECT 1 FROM dbo.inv_stock_log AS l
+              WHERE l.order_id = u.order_id AND l.material_id = u.material_id
                 AND l.log_type = 'SALE'
-                AND l.qty = u.qty
+              HAVING COUNT_BIG(*) = 1 AND MAX(l.qty) = u.qty
+          )
+    )
+    OR EXISTS (
+        SELECT 1
+        FROM inserted AS i
+        JOIN deleted AS d ON d.order_id = i.order_id
+        JOIN dbo.inv_stock_log AS l ON l.order_id = i.order_id AND l.log_type = 'SALE'
+        WHERE i.order_status = 'COMPLETED' AND d.order_status = 'MAKING'
+          AND EXISTS (SELECT 1 FROM dbo.order_material_usage AS u WHERE u.order_id = i.order_id)
+          AND NOT EXISTS (
+              SELECT 1 FROM dbo.order_material_usage AS u
+              WHERE u.order_id = i.order_id AND u.material_id = l.material_id
           )
     )
         THROW 51117, N'订单耗用快照与 SALE 扣料流水不一致，不能完成。', 1;

@@ -378,13 +378,14 @@ def confirm_order_stock(
     usages: Mapping[str, Decimal | int | float | str],
     employee_id: str,
     created_at: datetime | None = None,
+    audit_employee_id: str | None = None,
 ) -> bool:
     """确认订单耗用并写 SALE 流水，以订单+原料的 SALE 流水做幂等键。
 
     重复调用时，已存在 SALE 流水的原料直接跳过；不会二次扣减库存或重复记账。
     任一原料确认失败即抛 E4001，由业务层回滚。
     """
-    set_employee_context(cur, employee_id)
+    set_employee_context(cur, audit_employee_id)
     for material_id in sorted(usages):
         cur.execute(
             """

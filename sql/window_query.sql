@@ -66,13 +66,18 @@ RETURNS TABLE
 AS
 RETURN
 (
-    WITH days AS
+    WITH digits AS
     (
-        SELECT TOP (CASE WHEN @date_from > @date_to THEN 0
+        SELECT n FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) AS v(n)
+    ),
+    days AS
+    (
+        SELECT TOP (CASE WHEN @date_from IS NULL OR @date_to IS NULL OR @date_from > @date_to THEN 0
                          ELSE DATEDIFF(DAY, @date_from, @date_to) + 1 END)
                DATEADD(DAY, ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1, @date_from) AS sale_date
-        FROM sys.all_objects AS a
-        CROSS JOIN sys.all_objects AS b
+        FROM digits AS a CROSS JOIN digits AS b CROSS JOIN digits AS c
+        CROSS JOIN digits AS d CROSS JOIN digits AS e
+        CROSS JOIN digits AS f CROSS JOIN digits AS g
     ),
     daily AS
     (
@@ -118,13 +123,18 @@ RETURNS TABLE
 AS
 RETURN
 (
-    WITH days AS
+    WITH digits AS
     (
-        SELECT TOP (CASE WHEN @date_from > @date_to THEN 0
+        SELECT n FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) AS v(n)
+    ),
+    days AS
+    (
+        SELECT TOP (CASE WHEN @date_from IS NULL OR @date_to IS NULL OR @date_from > @date_to THEN 0
                          ELSE DATEDIFF(DAY, @date_from, @date_to) + 1 END)
                DATEADD(DAY, ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1, @date_from) AS sale_date
-        FROM sys.all_objects AS a
-        CROSS JOIN sys.all_objects AS b
+        FROM digits AS a CROSS JOIN digits AS b CROSS JOIN digits AS c
+        CROSS JOIN digits AS d CROSS JOIN digits AS e
+        CROSS JOIN digits AS f CROSS JOIN digits AS g
     ),
     daily AS
     (

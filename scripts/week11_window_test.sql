@@ -168,12 +168,16 @@ IF EXISTS (SELECT 1 FROM dbo.fn_daily_sales_moving_avg('2099-01-05', '2099-01-01
     THROW 51967, N'W3 非法区间应返回空结果集。', 1;
 PRINT N'PASS 4 边界：起止同日含当日；起 > 止返回空';
 
+IF EXISTS (SELECT 1 FROM dbo.fn_daily_sales_cumulative(NULL, '2099-01-05'))
+   OR EXISTS (SELECT 1 FROM dbo.fn_daily_sales_moving_avg('2099-01-01', NULL))
+    THROW 51970, N'日期参数为 NULL 时应返回空。', 1;
+
 PRINT N'== 5. 与第十周 fn_sales_summary 口径一致 ==';
-IF (SELECT SUM(sold_qty) FROM dbo.fn_sales_summary('2099-01-01', '2099-01-05')) <> 11
-   OR (SELECT SUM(gross_amount) FROM dbo.fn_sales_summary('2099-01-01', '2099-01-05')) <> 95
+IF (SELECT COALESCE(SUM(sold_qty), 0) FROM dbo.fn_sales_summary('2099-01-01', '2099-01-05')) <> 11
+   OR (SELECT COALESCE(SUM(gross_amount), 0) FROM dbo.fn_sales_summary('2099-01-01', '2099-01-05')) <> 95
     THROW 51968, N'窗口函数与 fn_sales_summary 合计不一致。', 1;
-IF (SELECT SUM(sold_qty) FROM dbo.fn_product_sales_rank('2099-01-01', '2099-01-05')) <> 11
-   OR (SELECT SUM(sales_amount) FROM dbo.fn_product_sales_rank('2099-01-01', '2099-01-05')) <> 95
+IF (SELECT COALESCE(SUM(sold_qty), 0) FROM dbo.fn_product_sales_rank('2099-01-01', '2099-01-05')) <> 11
+   OR (SELECT COALESCE(SUM(sales_amount), 0) FROM dbo.fn_product_sales_rank('2099-01-01', '2099-01-05')) <> 95
     THROW 51969, N'W1 合计与 fn_sales_summary 不一致。', 1;
 PRINT N'PASS 5 W1/W2/W3 与 fn_sales_summary 同为 11 件 / 95 元';
 

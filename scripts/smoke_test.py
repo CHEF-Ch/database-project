@@ -185,14 +185,14 @@ def render(rows, health, bad_resp, bad_body, leak, real_rows, classify_rows, con
       f"pyodbc {version('pyodbc')}　Werkzeug {version('werkzeug')}")
     w(f"连接配置：DB_AUTH={config.DB_AUTH}　DB_NAME={config.DB_NAME}　USER_STORE={config.USER_STORE}")
     w("")
-    w("【1】v1.0 基线（/health 只读探针）")
+    w("【1】数据库指纹（/health 只读探针）")
     w("-" * 90)
     w(json.dumps(health, ensure_ascii=False, indent=2))
     if fp:
         w("")
         w(f"结论：指纹 {fp['total']} = {fp['columns']} 列 + {fp['pk']} 主码 + {fp['uq']} UQ + "
           f"{fp['uq_filtered']} 筛选唯一索引 + {fp['fk']} 外码 + {fp['check']} CHECK + "
-          f"{fp['default']} DEFAULT；与第六周声明的 236 一致：{fp['match']}")
+          f"{fp['default']} DEFAULT；与当前版本指纹一致：{fp['match']}")
     w("")
     w("【2】分层骨架用例（页面层 → 权限矩阵 → 统一异常）")
     w("-" * 90)
@@ -219,10 +219,10 @@ def render(rows, health, bad_resp, bad_body, leak, real_rows, classify_rows, con
         w(f"{label:<34}{expect:>12}{actual:>10}  {status}")
     w("")
     fp = health.get("fingerprint") or {}
-    fp_ok = bool(fp.get("match")) and fp.get("total") == fp.get("expected_v1_0")
-    w("【6】v1.0 指纹判定（必须 match=True 才能算通过）")
+    fp_ok = bool(fp.get("match"))
+    w("【6】当前版本指纹判定（必须 match=True 才能算通过）")
     w("-" * 90)
-    w(f"total={fp.get('total')}  expected={fp.get('expected_v1_0')}  match={fp.get('match')}  → "
+    w(f"total={fp.get('total')}  schema={health.get('schema_version')}  match={fp.get('match')}  → "
       + ("PASS" if fp_ok else "FAIL"))
     w("")
     ok = (
@@ -253,7 +253,7 @@ def main() -> int:
         print(f"[{status}] {label}: {actual} (expect {expect})")
     print("\nRESULT:", "ALL CHECKS PASSED" if ok else "SOME CHECKS FAILED")
     fp = health.get("fingerprint") or {}
-    print(f"fingerprint: total={fp.get('total')} expected={fp.get('expected_v1_0')} match={fp.get('match')}")
+    print(f"fingerprint: total={fp.get('total')} schema={health.get('schema_version')} match={fp.get('match')}")
 
     if write:
         name = f"第7周-①②-骨架自检-{dt.date.today():%Y%m%d}.txt"

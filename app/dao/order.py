@@ -104,12 +104,6 @@ def insert_order(
             (order_id, channel, order_mode, order_status, member_id, employee_id,
              item_subtotal, coupon_discount, total_amount, pay_method, pay_txn_no,
              created_at, paid_at, completed_at, refund_amount, refund_at)
-        OUTPUT INSERTED.order_id, INSERTED.channel, INSERTED.order_mode,
-               INSERTED.order_status, INSERTED.member_id, INSERTED.employee_id,
-               INSERTED.item_subtotal, INSERTED.coupon_discount, INSERTED.total_amount,
-               INSERTED.pay_method, INSERTED.pay_txn_no, INSERTED.created_at,
-               INSERTED.paid_at, INSERTED.completed_at, INSERTED.refund_amount,
-               INSERTED.refund_at
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         order_id,
@@ -129,7 +123,7 @@ def insert_order(
         None if refund_amount is None else _dec(refund_amount),
         refund_at,
     )
-    created = fetch_one(cur)
+    created = get_order(cur, order_id)
     if created is None:
         raise AppError(ErrCode.INTERNAL, detail="订单插入后未返回行")
     return created

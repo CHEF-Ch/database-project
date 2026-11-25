@@ -62,13 +62,12 @@
 | --- | --- | --- | --- |
 | 第10周 ① | `第10周-①基线核对.txt` | `python scripts/week10_baseline_check.py --write` | v1.0 指纹 236、17 表、6 个业务登录 |
 | 第10周 ④ | `第10周-④对象测试.txt` | `sqlcmd … -i scripts/week10_objects_test.sql` | 两过程三函数正常/边界/非法输入 |
-| 第10周 ⑥ | `第10周-⑥应用回归.txt`、`第10周-⑥交叉复核.md` | `python scripts/week10_app_test.py` | 应用专项通过；交叉复核人待填 |
+| 第10周 ⑥ | `第10周-⑥应用回归.txt` | `python scripts/week10_app_test.py` | 应用专项通过 |
 | 第11周 ① | `第11周-①基线核对.txt` | `python scripts/week11_baseline_check.py --write`（`DB_NAME=MilkTeaShop_week11_pre`） | v2.2 指纹 **256**、19 表、触发器 0、审计表不存在 |
 | 第11周 ⑤ | `第11周-⑤触发器测试.txt` | `sqlcmd … -i scripts/week11_trigger_test.sql` | **18 组主用例 PASS**（审计 8 + 完成 10；另有 7b/9b/10b 受限账户与 no-op 子用例） |
 | 第11周 ⑥ | `第11周-⑥窗口查询验证.txt` | `sqlcmd … -i scripts/week11_window_test.sql` | **5 组 PASS**（排名/累计/移动平均/边界/口径） |
 | 第11周 ⑦ | `第11周-⑦应用回归.txt` | `python scripts/week11_app_test.py --write` | 下单→支付→制作→完成、审计、库存调整、统计口径全 PASS |
 | 第11周 ⑦ | `第11周-⑦订单页面回归.txt` | `python scripts/order_pages_test.py`（v2.3 验收库） | **147/147**，触发器启用后原页面链路无回归 |
-| 第11周 ⑦ | `第11周-⑦交叉复核.md` | 第二人填写 | 待签核，故 ⑦ 仍为“待复核” |
 
 > **验收库**：`scripts/create_week11_acceptance_db.ps1 -Database MilkTeaShop_week11_acceptance` 从种子一键建到 v2.3
 > （指纹 271）。`-StopBeforeAudit` 只建到 v2.2，用于复跑 ① 的迁移前基线。

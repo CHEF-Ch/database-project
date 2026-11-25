@@ -32,13 +32,12 @@ sys.path.insert(0, str(ROOT))
 
 from app.config import Config  # noqa: E402
 from app.dao.connection import connect, probe_database, schema_version  # noqa: E402
-from app.errors import AppError  # noqa: E402
+from app.errors import AppError, ErrCode  # noqa: E402
 import app.services.inventory_service as isvc  # noqa: E402
 import app.services.order_service as osvc  # noqa: E402
 
 MEMBER_ID = "C0000002"
 STOCK_EMPLOYEE = "E0000003"
-DEFAULT_EMPLOYEE = "E0000001"
 PRODUCT_ID = "P0000004"      # 椰果奶茶
 ADDON_ID = "M0000001"        # 珍珠，P0000004 的可选加料，2.00/份
 
@@ -137,7 +136,7 @@ def _expect_app_error(name: str, fn, rep: Reporter) -> None:
     try:
         fn()
     except AppError as exc:
-        rep.check(name, True, f"{exc.code}")
+        rep.check(name, exc.code == ErrCode.BUSINESS_RULE, f"{exc.code}")
     except Exception as exc:  # noqa: BLE001
         rep.check(name, False, f"抛了非 AppError：{exc!r}")
     else:
@@ -145,6 +144,9 @@ def _expect_app_error(name: str, fn, rep: Reporter) -> None:
 
 
 def main() -> int:
+    if set(sys.argv[1:]) - {"--write"}:
+        raise SystemExit("仅支持 --write。真实 SQL 角色连接请使用 order_pages_test.py --sql-auth。")
+
     db = Config.DB_NAME
     if not db.startswith("MilkTeaShop_week11_"):
         print(f"拒绝运行：DB_NAME={db!r} 不是 week11 验收库。")
@@ -222,8 +224,8 @@ def main() -> int:
             audits = h.audit_after(audit_before_pay)
             rep.check("2.4 每个耗用原料恰好一条审计", len(audits) == len(usages), f"{len(audits)} 条")
             rep.check(
-                "2.5 审计记录会话员工并写变动前后值",
-                all(r[5] == DEFAULT_EMPLOYEE and r[6] == "SESSION" for r in audits)
+                "2.5 顾客支付审计使用数据库登录名并记录库存变化",
+                all(r[5] is None and r[6] == "LOGIN" for r in audits)
                 and all(r[3] == -usages[r[0]] for r in audits),
             )
 
@@ -354,8 +356,7 @@ def main() -> int:
         rep.log("PASS：应用链路、审计触发器、完成规则与窗口函数口径全部通过")
     else:
         rep.log(f"FAIL：{rep.failures} 项失败（见上）")
-    rep.log(f"认证方式：{Config.DB_AUTH}；SQL 登录分支因本机 LoginMode=1 未启用混合认证，"
-            "角色权限由 week11_trigger_test.sql 的 EXECUTE AS USER 覆盖。")
+    rep.log(f"连接认证方式：{Config.DB_AUTH}；本专项使用单连接与保存点。")
     rep.log("=" * 96)
 
     text = "\n".join(rep.lines) + "\n"

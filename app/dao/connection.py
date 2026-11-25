@@ -168,8 +168,9 @@ def probe_database() -> dict:
             "AND OBJECT_ID('dbo.usp_find_app_user', 'P') IS NOT NULL "
             "THEN 1 ELSE 0 END AS user_store, "
             "CASE WHEN OBJECT_ID('dbo.inv_stock_audit', 'U') IS NOT NULL "
-            "AND OBJECT_ID('dbo.trg_item_material_audit', 'TR') IS NOT NULL "
-            "AND OBJECT_ID('dbo.trg_shop_order_complete', 'TR') IS NOT NULL "
+            "AND (SELECT COUNT(*) FROM sys.triggers WHERE is_disabled = 0 AND object_id IN "
+            "(OBJECT_ID('dbo.trg_item_material_audit', 'TR'), "
+            "OBJECT_ID('dbo.trg_shop_order_complete', 'TR'))) = 2 "
             "THEN 1 ELSE 0 END AS audit_objects"
         )
         meta = cur.fetchone()

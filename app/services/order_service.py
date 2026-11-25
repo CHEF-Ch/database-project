@@ -631,6 +631,7 @@ def pay_order(
     pay_txn_no: str | None = None,
     role: str | None = None,
     member_id: str | None = None,
+    employee_id: str | None = None,
     now: datetime | None = None,
 ) -> dict:
     """支付确认：``PENDING → PAID``，同事务确认库存、核销券、扣余额/计积分。
@@ -706,6 +707,7 @@ def pay_order(
             order_id=order_id,
             usages=usages,
             employee_id=order["employee_id"],
+            audit_employee_id=employee_id if role != "customer" else None,
             created_at=paid_at,
         )
 
